@@ -1,0 +1,226 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = { };
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GreenScreen - Reciclaje</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f5f5f5;
+      color: #333;
+    }
+    .navbar {
+      background-color: #1a3c34;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .navbar a {
+      color: #fff;
+      text-decoration: none;
+      margin: 0 15px;
+      font-size: 14px;
+    }
+    .navbar .right a {
+      background-color: #2e856e;
+      padding: 8px 15px;
+      border-radius: 5px;
+    }
+    .hero {
+      background: url('https://via.placeholder.com/1200x400?text=Cardboard+Stacks') no-repeat center center/cover;
+      height: 400px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      padding-left: 50px;
+      color: #fff;
+      position: relative;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+    }
+    .hero-text {
+      position: relative;
+      max-width: 500px;
+    }
+    .hero-text h1 {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    .hero-text p {
+      font-size: 18px;
+      line-height: 1.5;
+    }
+    .content-section {
+      max-width: 1200px;
+      margin: 40px auto;
+      padding: 20px;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    .content-section h2 {
+      font-size: 24px;
+      margin-bottom: 15px;
+    }
+    .content-section p {
+      font-size: 16px;
+      line-height: 1.6;
+      color: #666;
+    }
+    .cards-section {
+      max-width: 1200px;
+      margin: 40px auto;
+      display: flex;
+      gap: 20px;
+      padding: 20px;
+    }
+
+
+    .card {
+      flex: 1;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+    }
+    .card img {
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+    }
+    .card-content {
+      padding: 15px;
+    }
+    .card-content h3 {
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+    .card-content p {
+      font-size: 14px;
+      color: #666;
+    }
+    .logos-section {
+      max-width: 1200px;
+      margin: 40px auto;
+      padding: 20px;
+      text-align: center;
+    }
+    .logos-section img {
+      height: 40px;
+      margin: 0 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <div class="left">
+      <a href="#">Soluciones</a>
+      <a href="#">Compañía</a>
+      <a href="#">Equipo</a>
+      <a href="#">Noticias</a>
+      <a href="#">Contactanos</a>
+      <a href="#">Reserva online</a>
+    </div>
+    <div class="right">
+      <a href="#">TIENDA</a>
+    </div>
+  </div>
+
+  <div class="hero">
+    <div class="hero-text">
+      <h1>GREENSCREEN</h1>
+      <p>¡Bienvenidos a nuestra página de reciclaje! Te invitamos a unirte a cuidar nuestro planeta. Juntos podemos hacer la diferencia y promover un futuro sostenible. Descubre cómo contribuir a un mundo más limpio!</p>
+    </div>
+  </div>
+
+  <div class="content-section">
+    <h2>¡Bienvenido a nuestro sitio web compra y venta de reciclaje!</h2>
+    <p>Aquí, conectamos a personas que desean dar una vida a sus objetos con aquellos que buscan productos sostenibles. Únete a nosotros en la misión de hacer que el reciclaje sea más accesible mientras encuentras tesoros únicos. ¡Comienza a comprar y reciclar hoy mismo!</p>
+  </div>
+
+  <div class="content-section">
+    <h2>Que hacemos</h2>
+    <p>Conoce cómo conectamos compradores y vendedores de reciclaje. Nuestra plataforma te permite vender lo que ya no necesitas, comprar productos reciclados y ser parte de un movimiento sostenible y responsable.</p>
+  </div>
+
+  <div class="cards-section">
+    <div class="card">
+      <img src="https://via.placeholder.com/400x200?text=Recycling+Bin" alt="Recycling Bin">
+      <div class="card-content">
+        <h3>GreenScreen incentiva el reciclaje con incentivos...</h3>
+        <p>Descubre cómo motivamos a las personas a reciclar más.</p>
+      </div>
+    </div>
+    <div class="card">
+      <img src="https://via.placeholder.com/400x200?text=Recycled+Product" alt="Recycled Product">
+      <div class="card-content">
+        <h3>GreenScreen: Genera ingresos vendiendo producto...</h3>
+        <p>Gana dinero mientras ayudas al medio ambiente.</p>
+      </div>
+    </div>
+    <div class="card">
+      <img src="https://via.placeholder.com/400x200?text=Sustainable+Product" alt="Sustainable Product">
+      <div class="card-content">
+        <h3>Innovadora aplicación GreenScreen: ¡Compra...</h3>
+        <p>Encuentra productos reciclados únicos y sostenibles.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="logos-section">
+    <h2>Clientes</h2>
+    <img src="https://via.placeholder.com/100x40?text=ALDEN" alt="Alden Logo">
+    <img src="https://via.placeholder.com/100x40?text=ATHENA" alt="Athena Logo">
+  </div>
+</body>
+</html>
