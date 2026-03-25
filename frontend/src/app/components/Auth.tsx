@@ -1,156 +1,108 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router';
-import { Recycle, Mail, Lock, User, Building2, CheckCircle2 } from 'lucide-react';
+import { Recycle, Mail, Lock, User, Building2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
-import emailjs from '@emailjs/browser';
 import { toast } from 'sonner';
+import { supabase } from './supabaseClient';
 
 export function Auth() {
   const navigate = useNavigate();
   const [userType, setUserType] = useState<'recycler' | 'center'>('recycler');
-  const [showVerification, setShowVerification] = useState(false);
-  const [verificationCode, setVerificationCode] = useState('');
-  const [generatedCode, setGeneratedCode] = useState('');
-  const [userEmail, setUserEmail] = useState('');
-  const [userName, setUserName] = useState('');
-  const [isVerifying, setIsVerifying] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // El login es directo, sin verificación
-    localStorage.setItem('userType', userType);
+    setLoading(true);
+    const form = e.target as HTMLFormElement;
+    const email = (form.elements.namedItem('login-email') as HTMLInputElement).value;
+    const password = (form.elements.namedItem('login-password') as HTMLInputElement).value;
+
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      toast.error(error.message === 'Email not confirmed' 
+        ? 'Debes confirmar tu correo antes de iniciar sesión' 
+        : 'Correo o contraseña incorrectos');
+      setLoading(false);
+      return;
+    }
+
+    // Guardar datos del usuario
+    localStorage.setItem('userId', data.user.id);
+    localStorage.setItem('userEmail', data.user.email || '');
+    localStorage.setItem('userName', data.user.user_metadata?.nombre || '');
+    localStorage.setItem('userType', data.user.user_metadata?.tipo || userType);
+
+    toast.success('¡Bienvenido!');
     navigate('/dashboard');
+    setLoading(false);
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
     const form = e.target as HTMLFormElement;
-    const name = (form.elements.namedItem('register-name') as HTMLInputElement).value;
-    const email = (form.elements.namedItem('register-email') as HTMLInputElement).value;
-    
-    // Generar código de verificación de 6 dígitos
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedCode(code);
-    setUserEmail(email);
-    setUserName(name);
-    
-    // Mostrar el código en consola para desarrollo/pruebas
-    console.log('Código de verificación generado:', code);
-    
-    // Mostrar alerta con el código (para proyecto universitario sin servidor de correo configurado)
-    alert(`Para este proyecto universitario, tu código de verificación es: ${code}\n\nEn producción, este código se enviaría a tu correo: ${email}`);
-    
-    // Opcional: Si el usuario configura EmailJS, se puede enviar el correo real
-    // Para configurar EmailJS: https://www.emailjs.com/
-    // Descomentar el código siguiente y agregar las credenciales:
-    /*
-    try {
-      await emailjs.send(
-        'YOUR_SERVICE_ID', // ID del servicio de EmailJS
-        'YOUR_TEMPLATE_ID', // ID de la plantilla
-        {
-          to_email: email,
-          to_name: name,
-          verification_code: code,
-        },
-        'YOUR_PUBLIC_KEY' // Public Key de EmailJS
-      );
-      toast.success('Código de verificación enviado a tu correo');
-    } catch (error) {
-      console.error('Error al enviar correo:', error);
-    }
-    */
-    
-    setShowVerification(true);
-  };
+    const nombre = (form.elements.namedItem('register-name') as HTMLInputElement).value;
+    const correo = (form.elements.namedItem('register-email') as HTMLInputElement).value;
+    const password = (form.elements.namedItem('register-password') as HTMLInputElement).value;
 
-  const handleVerifyCode = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsVerifying(true);
-    
-    setTimeout(() => {
-      if (verificationCode === generatedCode) {
-        // Verificación exitosa
-        localStorage.setItem('userType', userType);
-        localStorage.setItem('userName', userName);
-        localStorage.setItem('userEmail', userEmail);
-        toast.success('¡Cuenta verificada exitosamente!');
-        navigate('/dashboard');
-      } else {
-        // Código incorrecto
-        toast.error('Código de verificación incorrecto. Inténtalo de nuevo.');
-        setVerificationCode('');
+    // 1. Registrar en Supabase Auth (envía correo de verificación automáticamente)
+    const { data, error } = await supabase.auth.signUp({
+      email: correo,
+      password: password,
+      options: {
+        data: { nombre, tipo: userType }
       }
-      setIsVerifying(false);
-    }, 500);
+    });
+
+    if (error) {
+      toast.error(error.message);
+      setLoading(false);
+      return;
+    }
+
+    // 2. Guardar datos extra en tabla usuarios
+    if (data.user) {
+      await supabase.from('usuarios').insert({
+        id_usuario: data.user.id,
+        nombre,
+        correo,
+        password,
+        tipo: userType
+      });
+    }
+
+    setShowConfirmation(true);
+    setLoading(false);
   };
 
-  // Vista de verificación de código
-  if (showVerification) {
+  // Vista de confirmación
+  if (showConfirmation) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-green-50 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
-          <Link to="/" className="flex items-center justify-center gap-2 mb-8">
-            <Recycle className="size-10 text-primary" />
-            <span className="text-2xl font-semibold text-foreground">GreenScript Exchange</span>
-          </Link>
-
-          <Card className="border-green-100 shadow-xl">
-            <CardHeader className="space-y-1 text-center">
+          <Card className="border-green-100 shadow-xl text-center">
+            <CardHeader>
               <div className="mx-auto mb-4 size-16 rounded-full bg-green-100 flex items-center justify-center">
                 <Mail className="size-8 text-primary" />
               </div>
-              <CardTitle className="text-2xl">Verifica tu correo</CardTitle>
+              <CardTitle className="text-2xl">¡Revisa tu correo!</CardTitle>
               <CardDescription>
-                Hemos enviado un código de verificación de 6 dígitos a<br />
-                <span className="font-medium text-foreground">{userEmail}</span>
+                Te enviamos un enlace de verificación. Haz clic en él para activar tu cuenta.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleVerifyCode} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="verification-code">Código de Verificación</Label>
-                  <Input
-                    id="verification-code"
-                    type="text"
-                    placeholder="000000"
-                    value={verificationCode}
-                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    className="text-center text-2xl font-bold tracking-widest"
-                    maxLength={6}
-                    required
-                  />
-                  <p className="text-xs text-muted-foreground text-center">
-                    Ingresa el código de 6 dígitos que recibiste
-                  </p>
-                </div>
-
-                <Button 
-                  type="submit" 
-                  className="w-full bg-primary hover:bg-green-600"
-                  disabled={verificationCode.length !== 6 || isVerifying}
-                >
-                  {isVerifying ? 'Verificando...' : 'Verificar y Continuar'}
+              <Link to="/auth">
+                <Button variant="outline" className="w-full">
+                  Volver al inicio de sesión
                 </Button>
-
-                <div className="text-center space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowVerification(false);
-                      setVerificationCode('');
-                    }}
-                    className="text-sm text-muted-foreground hover:text-primary"
-                  >
-                    ← Volver al registro
-                  </button>
-                </div>
-              </form>
+              </Link>
             </CardContent>
           </Card>
         </div>
@@ -158,11 +110,9 @@ export function Auth() {
     );
   }
 
-  // Vista normal de login/registro
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-green-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <Link to="/" className="flex items-center justify-center gap-2 mb-8">
           <Recycle className="size-10 text-primary" />
           <span className="text-2xl font-semibold text-foreground">GreenScript Exchange</span>
@@ -182,127 +132,72 @@ export function Auth() {
                 <TabsTrigger value="register">Registrarse</TabsTrigger>
               </TabsList>
 
-              {/* Login Tab */}
+              {/* Login */}
               <TabsContent value="login">
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="login-email">Correo Electrónico</Label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-3 size-4 text-muted-foreground" />
-                      <Input
-                        id="login-email"
-                        type="email"
-                        placeholder="tu@email.com"
-                        className="pl-10"
-                        required
-                      />
+                      <Input id="login-email" type="email" placeholder="tu@email.com" className="pl-10" required />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="login-password">Contraseña</Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-3 size-4 text-muted-foreground" />
-                      <Input
-                        id="login-password"
-                        type="password"
-                        placeholder="••••••••"
-                        className="pl-10"
-                        required
-                      />
+                      <Input id="login-password" type="password" placeholder="••••••••" className="pl-10" required />
                     </div>
                   </div>
-
-                  <div className="space-y-2">
-                    <Label>Tipo de Usuario</Label>
-                    <RadioGroup value={userType} onValueChange={(value) => setUserType(value as 'recycler' | 'center')}>
-                      <div className="flex items-center space-x-2 border rounded-lg p-3 hover:bg-green-50 transition-colors">
-                        <RadioGroupItem value="recycler" id="login-recycler" />
-                        <Label htmlFor="login-recycler" className="flex items-center gap-2 cursor-pointer flex-1">
-                          <User className="size-4 text-primary" />
-                          Reciclador
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2 border rounded-lg p-3 hover:bg-green-50 transition-colors">
-                        <RadioGroupItem value="center" id="login-center" />
-                        <Label htmlFor="login-center" className="flex items-center gap-2 cursor-pointer flex-1">
-                          <Building2 className="size-4 text-primary" />
-                          Centro de Acopio
-                        </Label>
-                      </div>
-                    </RadioGroup>
-                  </div>
-
-                  <Button type="submit" className="w-full bg-primary hover:bg-green-600">
-                    Iniciar Sesión
+                  <Button type="submit" className="w-full bg-primary hover:bg-green-600" disabled={loading}>
+                    {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
                   </Button>
                 </form>
               </TabsContent>
 
-              {/* Register Tab */}
+              {/* Registro */}
               <TabsContent value="register">
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="register-name">Nombre Completo</Label>
                     <div className="relative">
                       <User className="absolute left-3 top-3 size-4 text-muted-foreground" />
-                      <Input
-                        id="register-name"
-                        type="text"
-                        placeholder="Tu nombre"
-                        className="pl-10"
-                        required
-                      />
+                      <Input id="register-name" type="text" placeholder="Tu nombre" className="pl-10" required />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="register-email">Correo Electrónico</Label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-3 size-4 text-muted-foreground" />
-                      <Input
-                        id="register-email"
-                        type="email"
-                        placeholder="tu@email.com"
-                        className="pl-10"
-                        required
-                      />
+                      <Input id="register-email" type="email" placeholder="tu@email.com" className="pl-10" required />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="register-password">Contraseña</Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-3 size-4 text-muted-foreground" />
-                      <Input
-                        id="register-password"
-                        type="password"
-                        placeholder="••••••••"
-                        className="pl-10"
-                        required
-                      />
+                      <Input id="register-password" type="password" placeholder="••••••••" className="pl-10" required />
                     </div>
                   </div>
-
                   <div className="space-y-2">
                     <Label>Tipo de Usuario</Label>
                     <RadioGroup value={userType} onValueChange={(value) => setUserType(value as 'recycler' | 'center')}>
                       <div className="flex items-center space-x-2 border rounded-lg p-3 hover:bg-green-50 transition-colors">
                         <RadioGroupItem value="recycler" id="register-recycler" />
                         <Label htmlFor="register-recycler" className="flex items-center gap-2 cursor-pointer flex-1">
-                          <User className="size-4 text-primary" />
-                          Reciclador
+                          <User className="size-4 text-primary" /> Reciclador
                         </Label>
                       </div>
                       <div className="flex items-center space-x-2 border rounded-lg p-3 hover:bg-green-50 transition-colors">
                         <RadioGroupItem value="center" id="register-center" />
                         <Label htmlFor="register-center" className="flex items-center gap-2 cursor-pointer flex-1">
-                          <Building2 className="size-4 text-primary" />
-                          Centro de Acopio
+                          <Building2 className="size-4 text-primary" /> Centro de Acopio
                         </Label>
                       </div>
                     </RadioGroup>
                   </div>
-
-                  <Button type="submit" className="w-full bg-primary hover:bg-green-600">
-                    Crear Cuenta
+                  <Button type="submit" className="w-full bg-primary hover:bg-green-600" disabled={loading}>
+                    {loading ? 'Creando cuenta...' : 'Crear Cuenta'}
                   </Button>
                 </form>
               </TabsContent>
