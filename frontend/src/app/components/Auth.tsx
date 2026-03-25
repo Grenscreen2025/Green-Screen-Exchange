@@ -94,15 +94,17 @@ export function Auth() {
               </div>
               <CardTitle className="text-2xl">¡Revisa tu correo!</CardTitle>
               <CardDescription>
-                Te enviamos un enlace de verificación. Haz clic en él para activar tu cuenta.
+                Te enviamos un enlace de verificación. Haz clic en él para
+                activar tu cuenta.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Link to="/auth">
-                <Button variant="outline" className="w-full">
-                  Volver al inicio de sesión
-                </Button>
-              </Link>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setShowConfirmation(false)}>
+                Volver al inicio de sesión
+              </Button>
             </CardContent>
           </Card>
         </div>
