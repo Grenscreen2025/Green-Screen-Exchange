@@ -1,46 +1,103 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router';
-import { Recycle, Mail, Lock, User, Building2 } from 'lucide-react';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { RadioGroup, RadioGroupItem } from './ui/radio-group';
-import { toast } from 'sonner';
-import { supabase } from './supabaseClient';
+import { LocationPicker } from "./LocationPicker";
+import { useState, useEffect } from "react";
+import { useNavigate, Link } from "react-router";
+import { Recycle, Mail, Lock, User, Building2, Phone } from "lucide-react";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
+import { toast } from "sonner";
+import { supabase } from "./supabaseClient";
 
 export function Auth() {
+  const [paisesReg, setPaisesReg] = useState<any[]>([]);
+  const [depsReg, setDepsReg] = useState<any[]>([]);
+  const [ciudadesReg, setCiudadesReg] = useState<any[]>([]);
+  const [paisReg, setPaisReg] = useState("");
+  const [paisIsoReg, setPaisIsoReg] = useState("");
+  const [depReg, setDepReg] = useState("");
+  const [ciudadReg, setCiudadReg] = useState("");
   const navigate = useNavigate();
-  const [userType, setUserType] = useState<'recycler' | 'center'>('recycler');
+  const [activeTab, setActiveTab] = useState<"login" | "register">("login");
+  const [userType, setUserType] = useState<"recycler" | "center">("recycler");
   const [loading, setLoading] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [locationData, setLocationData] = useState({
+    pais: "",
+    departamento: "",
+    ciudad: "",
+    latitud: null as number | null,
+    longitud: null as number | null,
+    moneda: "COP",
+  });
+  const MONEDAS_REG: Record<string, string> = {
+    Colombia: "COP",
+    Venezuela: "VES",
+    Ecuador: "USD",
+    Peru: "PEN",
+    México: "MXN",
+    Argentina: "ARS",
+    Chile: "CLP",
+  };
+
+  useEffect(() => {
+    fetch("https://api.countrystatecity.in/v1/countries", {
+      headers: { "X-CSCAPI-KEY": "TU_API_KEY_AQUI" },
+    })
+      .then((r) => r.json())
+      .then((d) => setPaisesReg(Array.isArray(d) ? d : []))
+      .catch(() =>
+        setPaisesReg([
+          { name: "Colombia", iso2: "CO" },
+          { name: "Ecuador", iso2: "EC" },
+          { name: "Peru", iso2: "PE" },
+          { name: "México", iso2: "MX" },
+          { name: "Argentina", iso2: "AR" },
+          { name: "Chile", iso2: "CL" },
+          { name: "Venezuela", iso2: "VE" },
+        ]),
+      );
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     const form = e.target as HTMLFormElement;
-    const email = (form.elements.namedItem('login-email') as HTMLInputElement).value;
-    const password = (form.elements.namedItem('login-password') as HTMLInputElement).value;
+    const email = (form.elements.namedItem("login-email") as HTMLInputElement)
+      .value;
+    const password = (
+      form.elements.namedItem("login-password") as HTMLInputElement
+    ).value;
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
     if (error) {
-      toast.error(error.message === 'Email not confirmed' 
-        ? 'Debes confirmar tu correo antes de iniciar sesión' 
-        : 'Correo o contraseña incorrectos');
+      toast.error(
+        error.message === "Email not confirmed"
+          ? "Debes confirmar tu correo antes de iniciar sesión"
+          : "Correo o contraseña incorrectos",
+      );
       setLoading(false);
       return;
     }
 
-    // Guardar datos del usuario
-    localStorage.setItem('userId', data.user.id);
-    localStorage.setItem('userEmail', data.user.email || '');
-    localStorage.setItem('userName', data.user.user_metadata?.nombre || '');
-    localStorage.setItem('userType', data.user.user_metadata?.tipo || userType);
-
-    toast.success('¡Bienvenido!');
-    navigate('/dashboard');
+    localStorage.setItem("userId", data.user.id);
+    localStorage.setItem("userEmail", data.user.email || "");
+    localStorage.setItem("userName", data.user.user_metadata?.nombre || "");
+    localStorage.setItem("userType", data.user.user_metadata?.tipo || userType);
+    toast.success("¡Bienvenido!");
+    navigate("/dashboard");
     setLoading(false);
   };
 
@@ -48,17 +105,23 @@ export function Auth() {
     e.preventDefault();
     setLoading(true);
     const form = e.target as HTMLFormElement;
-    const nombre = (form.elements.namedItem('register-name') as HTMLInputElement).value;
-    const correo = (form.elements.namedItem('register-email') as HTMLInputElement).value;
-    const password = (form.elements.namedItem('register-password') as HTMLInputElement).value;
+    const nombre = (
+      form.elements.namedItem("register-name") as HTMLInputElement
+    ).value;
+    const correo = (
+      form.elements.namedItem("register-email") as HTMLInputElement
+    ).value;
+    const password = (
+      form.elements.namedItem("register-password") as HTMLInputElement
+    ).value;
+    const telefono = (
+      form.elements.namedItem("register-phone") as HTMLInputElement
+    ).value;
 
-    // 1. Registrar en Supabase Auth (envía correo de verificación automáticamente)
     const { data, error } = await supabase.auth.signUp({
       email: correo,
-      password: password,
-      options: {
-        data: { nombre, tipo: userType }
-      }
+      password,
+      options: { data: { nombre, tipo: userType } },
     });
 
     if (error) {
@@ -67,22 +130,27 @@ export function Auth() {
       return;
     }
 
-    // 2. Guardar datos extra en tabla usuarios
     if (data.user) {
-      await supabase.from('usuarios').insert({
+      await supabase.from("usuarios").insert({
         id_usuario: data.user.id,
         nombre,
         correo,
         password,
-        tipo: userType
+        tipo: userType,
+        telefono,
+        pais: locationData.pais,
+        departamento: locationData.departamento,
+        ciudad: locationData.ciudad,
+        latitud: locationData.latitud,
+        longitud: locationData.longitud,
+        moneda: locationData.moneda,
       });
     }
-
     setShowConfirmation(true);
     setLoading(false);
   };
 
-  // Vista de confirmación
+  /* ── Pantalla de confirmación ── */
   if (showConfirmation) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-green-50 flex items-center justify-center p-4">
@@ -102,7 +170,8 @@ export function Auth() {
               <Button
                 variant="outline"
                 className="w-full"
-                onClick={() => setShowConfirmation(false)}>
+                onClick={() => setShowConfirmation(false)}
+              >
                 Volver al inicio de sesión
               </Button>
             </CardContent>
@@ -112,12 +181,17 @@ export function Auth() {
     );
   }
 
+  /* ── Layout principal ── */
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-green-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+      <div
+        className={`w-full transition-all duration-500 ${activeTab === "register" ? "max-w-5xl" : "max-w-md"}`}
+      >
         <Link to="/" className="flex items-center justify-center gap-2 mb-8">
           <Recycle className="size-10 text-primary" />
-          <span className="text-2xl font-semibold text-foreground">GreenScript Exchange</span>
+          <span className="text-2xl font-semibold text-foreground">
+            GreenScript Exchange
+          </span>
         </Link>
 
         <Card className="border-green-100 shadow-xl">
@@ -127,86 +201,300 @@ export function Auth() {
               Inicia sesión o crea una cuenta para comenzar
             </CardDescription>
           </CardHeader>
+
           <CardContent>
-            <Tabs defaultValue="login" className="w-full">
+            <Tabs
+              value={activeTab}
+              onValueChange={(v) => setActiveTab(v as "login" | "register")}
+              className="w-full"
+            >
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="login">Iniciar Sesión</TabsTrigger>
                 <TabsTrigger value="register">Registrarse</TabsTrigger>
               </TabsList>
 
-              {/* Login */}
+              {/* ══ LOGIN ══ */}
               <TabsContent value="login">
-                <form onSubmit={handleLogin} className="space-y-4">
+                <form onSubmit={handleLogin} className="space-y-4 mt-2">
                   <div className="space-y-2">
                     <Label htmlFor="login-email">Correo Electrónico</Label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-3 size-4 text-muted-foreground" />
-                      <Input id="login-email" type="email" placeholder="tu@email.com" className="pl-10" required />
+                      <Input
+                        id="login-email"
+                        type="email"
+                        placeholder="tu@email.com"
+                        className="pl-10"
+                        required
+                      />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="login-password">Contraseña</Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-3 size-4 text-muted-foreground" />
-                      <Input id="login-password" type="password" placeholder="••••••••" className="pl-10" required />
+                      <Input
+                        id="login-password"
+                        type="password"
+                        placeholder="••••••••"
+                        className="pl-10"
+                        required
+                      />
                     </div>
                   </div>
-                  <Button type="submit" className="w-full bg-primary hover:bg-green-600" disabled={loading}>
-                    {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
+                  <Button
+                    type="submit"
+                    className="w-full bg-primary hover:bg-green-600"
+                    disabled={loading}
+                  >
+                    {loading ? "Iniciando sesión..." : "Iniciar Sesión"}
                   </Button>
                 </form>
               </TabsContent>
 
-              {/* Registro */}
+              {/* ══ REGISTRO ══ */}
               <TabsContent value="register">
-                <form onSubmit={handleRegister} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="register-name">Nombre Completo</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-3 size-4 text-muted-foreground" />
-                      <Input id="register-name" type="text" placeholder="Tu nombre" className="pl-10" required />
+                <form onSubmit={handleRegister} className="space-y-4 mt-2">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="register-name">Nombre Completo</Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-3 size-4 text-muted-foreground" />
+                        <Input
+                          id="register-name"
+                          type="text"
+                          placeholder="Tu nombre"
+                          className="pl-10"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="register-phone">
+                        Teléfono / WhatsApp
+                      </Label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-3 size-4 text-muted-foreground" />
+                        <Input
+                          id="register-phone"
+                          type="tel"
+                          placeholder="+57 310 XXX XXXX"
+                          className="pl-10"
+                          required
+                        />
+                      </div>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="register-email">Correo Electrónico</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-3 size-4 text-muted-foreground" />
-                      <Input id="register-email" type="email" placeholder="tu@email.com" className="pl-10" required />
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="register-email">Correo Electrónico</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-3 size-4 text-muted-foreground" />
+                        <Input
+                          id="register-email"
+                          type="email"
+                          placeholder="tu@email.com"
+                          className="pl-10"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="register-password">Contraseña</Label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-3 size-4 text-muted-foreground" />
+                        <Input
+                          id="register-password"
+                          type="password"
+                          placeholder="••••••••"
+                          className="pl-10"
+                          required
+                        />
+                      </div>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="register-password">Contraseña</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-3 size-4 text-muted-foreground" />
-                      <Input id="register-password" type="password" placeholder="••••••••" className="pl-10" required />
-                    </div>
-                  </div>
+
                   <div className="space-y-2">
                     <Label>Tipo de Usuario</Label>
-                    <RadioGroup value={userType} onValueChange={(value) => setUserType(value as 'recycler' | 'center')}>
+                    <RadioGroup
+                      value={userType}
+                      onValueChange={(v) =>
+                        setUserType(v as "recycler" | "center")
+                      }
+                      className="grid grid-cols-2 gap-3"
+                    >
                       <div className="flex items-center space-x-2 border rounded-lg p-3 hover:bg-green-50 transition-colors">
-                        <RadioGroupItem value="recycler" id="register-recycler" />
-                        <Label htmlFor="register-recycler" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <RadioGroupItem
+                          value="recycler"
+                          id="register-recycler"
+                        />
+                        <Label
+                          htmlFor="register-recycler"
+                          className="flex items-center gap-2 cursor-pointer flex-1"
+                        >
                           <User className="size-4 text-primary" /> Reciclador
                         </Label>
                       </div>
                       <div className="flex items-center space-x-2 border rounded-lg p-3 hover:bg-green-50 transition-colors">
                         <RadioGroupItem value="center" id="register-center" />
-                        <Label htmlFor="register-center" className="flex items-center gap-2 cursor-pointer flex-1">
-                          <Building2 className="size-4 text-primary" /> Centro de Acopio
+                        <Label
+                          htmlFor="register-center"
+                          className="flex items-center gap-2 cursor-pointer flex-1"
+                        >
+                          <Building2 className="size-4 text-primary" /> Centro
+                          de Acopio
                         </Label>
                       </div>
                     </RadioGroup>
                   </div>
-                  <Button type="submit" className="w-full bg-primary hover:bg-green-600" disabled={loading}>
-                    {loading ? 'Creando cuenta...' : 'Crear Cuenta'}
+
+                  {/* Ubicación simple - solo selectores */}
+                  <div className="space-y-2">
+                    <Label className="text-base font-semibold">Ubicación</Label>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">
+                          País
+                        </Label>
+                        <select
+                          className="w-full border rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                          onChange={(e) => {
+                            const selected = paisesReg.find(
+                              (p: any) => p.iso2 === e.target.value,
+                            );
+                            if (selected) {
+                              setPaisReg(selected.name);
+                              setPaisIsoReg(e.target.value);
+                              setDepReg("");
+                              setCiudadReg("");
+                              setDepsReg([]);
+                              setCiudadesReg([]);
+                              setLocationData((prev) => ({
+                                ...prev,
+                                pais: selected.name,
+                                moneda: MONEDAS_REG[selected.name] || "USD",
+                              }));
+                              fetch(
+                                `https://api.countrystatecity.in/v1/countries/${e.target.value}/states`,
+                                {
+                                  headers: {
+                                    "X-CSCAPI-KEY": "TU_API_KEY_AQUI",
+                                  },
+                                },
+                              )
+                                .then((r) => r.json())
+                                .then((d) =>
+                                  setDepsReg(Array.isArray(d) ? d : []),
+                                );
+                            }
+                          }}
+                          defaultValue=""
+                        >
+                          <option value="" disabled>
+                            Selecciona
+                          </option>
+                          {paisesReg.map((p: any) => (
+                            <option key={p.iso2} value={p.iso2}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">
+                          Departamento
+                        </Label>
+                        <select
+                          className="w-full border rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                          onChange={(e) => {
+                            const selected = depsReg.find(
+                              (d: any) => d.iso2 === e.target.value,
+                            );
+                            if (selected) {
+                              setDepReg(selected.name);
+                              setCiudadReg("");
+                              setCiudadesReg([]);
+                              setLocationData((prev) => ({
+                                ...prev,
+                                departamento: selected.name,
+                              }));
+                              fetch(
+                                `https://api.countrystatecity.in/v1/countries/${paisIsoReg}/states/${e.target.value}/cities`,
+                                {
+                                  headers: {
+                                    "X-CSCAPI-KEY": "TU_API_KEY_AQUI",
+                                  },
+                                },
+                              )
+                                .then((r) => r.json())
+                                .then((d) =>
+                                  setCiudadesReg(Array.isArray(d) ? d : []),
+                                );
+                            }
+                          }}
+                          defaultValue=""
+                          disabled={depsReg.length === 0}
+                        >
+                          <option value="" disabled>
+                            {depsReg.length === 0
+                              ? "Primero país"
+                              : "Selecciona"}
+                          </option>
+                          {depsReg.map((d: any) => (
+                            <option key={d.iso2} value={d.iso2}>
+                              {d.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">
+                          Ciudad
+                        </Label>
+                        <select
+                          className="w-full border rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                          onChange={(e) => {
+                            setCiudadReg(e.target.value);
+                            setLocationData((prev) => ({
+                              ...prev,
+                              ciudad: e.target.value,
+                            }));
+                          }}
+                          defaultValue=""
+                          disabled={ciudadesReg.length === 0}
+                        >
+                          <option value="" disabled>
+                            {ciudadesReg.length === 0
+                              ? "Primero departamento"
+                              : "Selecciona"}
+                          </option>
+                          {ciudadesReg.map((c: any) => (
+                            <option key={c.id} value={c.name}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full bg-primary hover:bg-green-600"
+                    disabled={loading}
+                  >
+                    {loading ? "Creando cuenta..." : "Crear Cuenta"}
                   </Button>
                 </form>
               </TabsContent>
             </Tabs>
 
             <div className="mt-6 text-center">
-              <Link to="/" className="text-sm text-muted-foreground hover:text-primary">
+              <Link
+                to="/"
+                className="text-sm text-muted-foreground hover:text-primary"
+              >
                 ← Volver al inicio
               </Link>
             </div>
