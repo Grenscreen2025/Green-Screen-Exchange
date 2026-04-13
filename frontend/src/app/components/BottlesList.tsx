@@ -1,16 +1,37 @@
-import { useState, useEffect } from 'react';
-import { Search, Filter, Package, MapPin, DollarSign, User, Building2, MessageCircle } from 'lucide-react';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Badge } from './ui/badge';
-import { supabase } from './supabaseClient';
+import { useState, useEffect } from "react";
+import {
+  Search,
+  Filter,
+  Package,
+  MapPin,
+  DollarSign,
+  User,
+  Building2,
+  MessageCircle,
+} from "lucide-react";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
+import { Badge } from "./ui/badge";
+import { supabase } from "./supabaseClient";
 
 interface BottleListing {
   id: number;
   seller: string;
-  sellerType: 'recycler' | 'center';
+  sellerType: "recycler" | "center";
   telefono: string;
   quantity: number;
   bottleType: string;
@@ -22,10 +43,10 @@ interface BottleListing {
 }
 
 export function BottlesList() {
-  const userType = localStorage.getItem('userType') || 'recycler';
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedType, setSelectedType] = useState('all');
-  const [selectedLocation, setSelectedLocation] = useState('all');
+  const userType = localStorage.getItem("userType") || "recycler";
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedType, setSelectedType] = useState("all");
+  const [selectedLocation, setSelectedLocation] = useState("all");
   const [listings, setListings] = useState<BottleListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [tiposBotella, setTiposBotella] = useState<any[]>([]);
@@ -40,51 +61,55 @@ export function BottlesList() {
 
     // Cargar tipos de botella para filtros
     const { data: tipos } = await supabase
-      .from('tipos_botella')
-      .select('id_tipo_botella, nombre');
+      .from("tipos_botella")
+      .select("id_tipo_botella, nombre");
     setTiposBotella(tipos || []);
 
     // Cargar ubicaciones para filtros
     const { data: ubics } = await supabase
-      .from('ubicaciones')
-      .select('id_ubicacion, ciudad, pais');
+      .from("ubicaciones")
+      .select("id_ubicacion, ciudad, pais");
     setUbicaciones(ubics || []);
 
     // Cargar publicaciones con joins
     const { data, error } = await supabase
-      .from('publicaciones')
-      .select(`
+      .from("publicaciones")
+      .select(
+        `
         id_publicacion,
         titulo,
         cantidad_unidades,
-        precio_unitario_usd,
+        precio_unitario,
         descripcion,
         fecha_publicacion,
         estado,
         usuarios!id_usuario (nombre, tipo_usuario, telefono, moneda),
         tipos_botella!id_tipo_botella (nombre),
         ubicaciones!id_ubicacion (ciudad, pais)
-      `)
-      .eq('estado', 'activa')
-      .order('fecha_publicacion', { ascending: false });
+      `,
+      )
+      .eq("estado", "activa")
+      .order("fecha_publicacion", { ascending: false });
 
     if (error) {
-      console.error('Error cargando publicaciones:', error);
+      console.error("Error cargando publicaciones:", error);
       setLoading(false);
       return;
     }
 
     const mapped: BottleListing[] = (data || []).map((p: any) => ({
       id: p.id_publicacion,
-      seller: p.usuarios?.nombre || 'Vendedor',
-      sellerType: p.usuarios?.tipo_usuario === 'center' ? 'center' : 'recycler',
-      telefono: p.usuarios?.telefono || '',
+      seller: p.usuarios?.nombre || "Vendedor",
+      sellerType: p.usuarios?.tipo_usuario === "center" ? "center" : "recycler",
+      telefono: p.usuarios?.telefono || "",
       quantity: p.cantidad_unidades,
-      bottleType: p.tipos_botella?.nombre || p.titulo || 'Botella',
-      pricePerUnit: p.precio_unitario_usd,
-      moneda: p.usuarios?.moneda || 'COP',
-      location: p.ubicaciones ? `${p.ubicaciones.ciudad}, ${p.ubicaciones.pais}` : 'Colombia',
-      description: p.descripcion || '',
+      bottleType: p.tipos_botella?.nombre || p.titulo || "Botella",
+      pricePerUnit: p.precio_unitario,
+      moneda: p.usuarios?.moneda || "COP",
+      location: p.ubicaciones
+        ? `${p.ubicaciones.ciudad}, ${p.ubicaciones.pais}`
+        : "Colombia",
+      description: p.descripcion || "",
       postedDate: p.fecha_publicacion,
     }));
 
@@ -93,14 +118,14 @@ export function BottlesList() {
   };
 
   const handleContactar = (listing: BottleListing) => {
-    const phone = listing.telefono?.replace(/\D/g, '') || '';
+    const phone = listing.telefono?.replace(/\D/g, "") || "";
     const message = encodeURIComponent(
-      `Hola ${listing.seller}! Vi tu publicación en GreenScript Exchange sobre ${listing.bottleType} (${listing.quantity} unidades a ${listing.moneda} ${listing.pricePerUnit}/unidad). ¿Está disponible?`
+      `Hola ${listing.seller}! Vi tu publicación en GreenScript Exchange sobre ${listing.bottleType} (${listing.quantity} unidades a ${listing.moneda} ${listing.pricePerUnit}/unidad). ¿Está disponible?`,
     );
     const url = phone
       ? `https://wa.me/${phone}?text=${message}`
       : `https://wa.me/?text=${message}`;
-    window.open(url, '_blank');
+    window.open(url, "_blank");
   };
 
   const filteredListings = listings.filter((listing) => {
@@ -108,19 +133,24 @@ export function BottlesList() {
       listing.seller.toLowerCase().includes(searchQuery.toLowerCase()) ||
       listing.bottleType.toLowerCase().includes(searchQuery.toLowerCase()) ||
       listing.location.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesType = selectedType === 'all' || listing.bottleType.toLowerCase().includes(selectedType.toLowerCase());
-    const matchesLocation = selectedLocation === 'all' || listing.location.includes(selectedLocation);
+    const matchesType =
+      selectedType === "all" ||
+      listing.bottleType.toLowerCase().includes(selectedType.toLowerCase());
+    const matchesLocation =
+      selectedLocation === "all" || listing.location.includes(selectedLocation);
     return matchesSearch && matchesType && matchesLocation;
   });
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-foreground">Botellas Disponibles</h1>
+        <h1 className="text-3xl font-bold text-foreground">
+          Botellas Disponibles
+        </h1>
         <p className="text-muted-foreground mt-2">
-          {userType === 'recycler'
-            ? 'Encuentra centros de acopio interesados en comprar tus botellas'
-            : 'Descubre ofertas de recicladores con botellas disponibles'}
+          {userType === "recycler"
+            ? "Encuentra centros de acopio interesados en comprar tus botellas"
+            : "Descubre ofertas de recicladores con botellas disponibles"}
         </p>
       </div>
 
@@ -150,11 +180,16 @@ export function BottlesList() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Tipo de Plástico</label>
               <Select value={selectedType} onValueChange={setSelectedType}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar tipo" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos los tipos</SelectItem>
                   {tiposBotella.map((t) => (
-                    <SelectItem key={t.id_tipo_botella} value={t.nombre.toLowerCase()}>
+                    <SelectItem
+                      key={t.id_tipo_botella}
+                      value={t.nombre.toLowerCase()}
+                    >
                       {t.nombre}
                     </SelectItem>
                   ))}
@@ -164,8 +199,13 @@ export function BottlesList() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Ubicación</label>
-              <Select value={selectedLocation} onValueChange={setSelectedLocation}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar ubicación" /></SelectTrigger>
+              <Select
+                value={selectedLocation}
+                onValueChange={setSelectedLocation}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar ubicación" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas las ubicaciones</SelectItem>
                   {ubicaciones.map((u) => (
@@ -184,38 +224,68 @@ export function BottlesList() {
         <p className="text-sm text-muted-foreground">
           Mostrando {filteredListings.length} de {listings.length} resultados
         </p>
-        {(searchQuery || selectedType !== 'all' || selectedLocation !== 'all') && (
-          <Button variant="ghost" size="sm" onClick={() => { setSearchQuery(''); setSelectedType('all'); setSelectedLocation('all'); }}>
+        {(searchQuery ||
+          selectedType !== "all" ||
+          selectedLocation !== "all") && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSearchQuery("");
+              setSelectedType("all");
+              setSelectedLocation("all");
+            }}
+          >
             Limpiar filtros
           </Button>
         )}
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-muted-foreground">Cargando publicaciones...</div>
+        <div className="text-center py-12 text-muted-foreground">
+          Cargando publicaciones...
+        </div>
       ) : (
         <div className="grid gap-6 md:grid-cols-2">
           {filteredListings.map((listing) => (
-            <Card key={listing.id} className="border-green-100 hover:shadow-lg transition-shadow">
+            <Card
+              key={listing.id}
+              className="border-green-100 hover:shadow-lg transition-shadow"
+            >
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      {listing.sellerType === 'recycler' ? (
+                      {listing.sellerType === "recycler" ? (
                         <User className="size-4 text-primary" />
                       ) : (
                         <Building2 className="size-4 text-primary" />
                       )}
-                      <CardTitle className="text-lg">{listing.seller}</CardTitle>
+                      <CardTitle className="text-lg">
+                        {listing.seller}
+                      </CardTitle>
                     </div>
                     <CardDescription className="flex items-center gap-1">
                       <MapPin className="size-3" />
                       {listing.location}
                     </CardDescription>
                   </div>
-                  <Badge variant={listing.sellerType === 'recycler' ? 'default' : 'secondary'}>
-                    {listing.sellerType === 'recycler' ? 'Reciclador' : 'Centro de Acopio'}
-                  </Badge>
+                  <div className="flex flex-col gap-2 items-end">
+                    <Badge
+                      variant={
+                        listing.sellerType === "recycler"
+                          ? "default"
+                          : "secondary"
+                      }
+                    >
+                      {listing.sellerType === "recycler"
+                        ? "Reciclador"
+                        : "Centro de Acopio"}
+                    </Badge>
+                    <Badge className="bg-green-100 text-green-700 border border-green-300">
+                      ✓ Activa
+                    </Badge>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -225,18 +295,24 @@ export function BottlesList() {
                       <Package className="size-4 text-primary" />
                       <span className="text-sm font-medium">Cantidad</span>
                     </div>
-                    <span className="font-semibold">{listing.quantity.toLocaleString()} botellas</span>
+                    <span className="font-semibold">
+                      {listing.quantity.toLocaleString()} botellas
+                    </span>
                   </div>
 
                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm font-medium">Tipo de Plástico</span>
+                    <span className="text-sm font-medium">
+                      Tipo de Plástico
+                    </span>
                     <span className="text-sm">{listing.bottleType}</span>
                   </div>
 
                   <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
                     <div className="flex items-center gap-2">
                       <DollarSign className="size-4 text-blue-600" />
-                      <span className="text-sm font-medium">Precio por unidad</span>
+                      <span className="text-sm font-medium">
+                        Precio por unidad
+                      </span>
                     </div>
                     <span className="font-semibold text-blue-600">
                       {listing.moneda} {listing.pricePerUnit.toFixed(2)}
@@ -244,24 +320,37 @@ export function BottlesList() {
                   </div>
 
                   <div className="p-3 bg-amber-50 rounded-lg">
-                    <div className="text-xs text-muted-foreground mb-1">Total estimado</div>
+                    <div className="text-xs text-muted-foreground mb-1">
+                      Total estimado
+                    </div>
                     <div className="text-xl font-bold text-amber-700">
-                      {listing.moneda} {(listing.quantity * listing.pricePerUnit).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                      {listing.moneda}{" "}
+                      {(listing.quantity * listing.pricePerUnit).toLocaleString(
+                        "es-ES",
+                        { minimumFractionDigits: 2 },
+                      )}
                     </div>
                   </div>
                 </div>
 
                 {listing.description && (
                   <div className="pt-2 border-t">
-                    <p className="text-sm text-muted-foreground">{listing.description}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {listing.description}
+                    </p>
                   </div>
                 )}
 
                 <div className="flex items-center justify-between pt-2">
                   <span className="text-xs text-muted-foreground">
-                    Publicado: {new Date(listing.postedDate).toLocaleDateString('es-ES')}
+                    Publicado:{" "}
+                    {new Date(listing.postedDate).toLocaleDateString("es-ES")}
                   </span>
-                  <Button size="sm" className="bg-green-500 hover:bg-green-600" onClick={() => handleContactar(listing)}>
+                  <Button
+                    size="sm"
+                    className="bg-green-500 hover:bg-green-600"
+                    onClick={() => handleContactar(listing)}
+                  >
                     <MessageCircle className="size-4 mr-2" />
                     Contactar WhatsApp
                   </Button>
@@ -276,9 +365,20 @@ export function BottlesList() {
         <Card className="border-dashed">
           <CardContent className="py-12 text-center">
             <Package className="size-12 text-muted-foreground mx-auto mb-4 opacity-50" />
-            <h3 className="text-lg font-semibold mb-2">No se encontraron resultados</h3>
-            <p className="text-muted-foreground mb-4">Intenta ajustar tus filtros de búsqueda</p>
-            <Button variant="outline" onClick={() => { setSearchQuery(''); setSelectedType('all'); setSelectedLocation('all'); }}>
+            <h3 className="text-lg font-semibold mb-2">
+              No se encontraron resultados
+            </h3>
+            <p className="text-muted-foreground mb-4">
+              Intenta ajustar tus filtros de búsqueda
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSearchQuery("");
+                setSelectedType("all");
+                setSelectedLocation("all");
+              }}
+            >
               Limpiar filtros
             </Button>
           </CardContent>
