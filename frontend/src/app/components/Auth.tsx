@@ -50,7 +50,10 @@ export function Auth() {
 
   useEffect(() => {
     fetch("https://api.countrystatecity.in/v1/countries", {
-      headers: { "X-CSCAPI-KEY": "TU_API_KEY_AQUI" },
+      headers: {
+        "X-CSCAPI-KEY":
+          "b7744cb1f6d720120baf2130c8f232e86c5baa721afb2c52ea3e9e687242772b",
+      },
     })
       .then((r) => r.json())
       .then((d) => setPaisesReg(Array.isArray(d) ? d : []))
@@ -92,10 +95,19 @@ export function Auth() {
       return;
     }
 
+    // Obtener tipo_usuario real desde la tabla usuarios
+    const { data: usuarioData } = await supabase
+      .from("usuarios")
+      .select("tipo_usuario, nombre, moneda")
+      .eq("correo", data.user.email)
+      .single();
+
     localStorage.setItem("userId", data.user.id);
     localStorage.setItem("userEmail", data.user.email || "");
-    localStorage.setItem("userName", data.user.user_metadata?.nombre || "");
-    localStorage.setItem("userType", data.user.user_metadata?.tipo || userType);
+    localStorage.setItem("userName", usuarioData?.nombre || "");
+    localStorage.setItem("userType", usuarioData?.tipo_usuario || "recycler");
+    localStorage.setItem("userMoneda", usuarioData?.moneda || "COP");
+
     toast.success("¡Bienvenido!");
     navigate("/dashboard");
     setLoading(false);
@@ -131,20 +143,34 @@ export function Auth() {
     }
 
     if (data.user) {
-      await supabase.from("usuarios").insert({
-        id_usuario: data.user.id,
+      // Obtener el próximo id_usuario
+      const { data: maxData } = await supabase
+        .from("usuarios")
+        .select("id_usuario")
+        .order("id_usuario", { ascending: false })
+        .limit(1)
+        .single();
+
+      const nextId = (maxData?.id_usuario || 0) + 1;
+
+      const { error: insertError } = await supabase.from("usuarios").insert({
+        id_usuario: nextId,
         nombre,
         correo,
         password,
-        tipo: userType,
+        tipo_usuario: userType,
         telefono,
         pais: locationData.pais,
-        departamento: locationData.departamento,
-        ciudad: locationData.ciudad,
-        latitud: locationData.latitud,
-        longitud: locationData.longitud,
+        ciudad_base: locationData.ciudad,
         moneda: locationData.moneda,
+        fecha_registro: new Date().toISOString().split("T")[0],
       });
+
+      if (insertError) {
+        toast.error("Error al guardar usuario: " + insertError.message);
+        setLoading(false);
+        return;
+      }
     }
     setShowConfirmation(true);
     setLoading(false);
@@ -379,7 +405,8 @@ export function Auth() {
                                 `https://api.countrystatecity.in/v1/countries/${e.target.value}/states`,
                                 {
                                   headers: {
-                                    "X-CSCAPI-KEY": "TU_API_KEY_AQUI",
+                                    "X-CSCAPI-KEY":
+                                      "b7744cb1f6d720120baf2130c8f232e86c5baa721afb2c52ea3e9e687242772b",
                                   },
                                 },
                               )
@@ -423,7 +450,8 @@ export function Auth() {
                                 `https://api.countrystatecity.in/v1/countries/${paisIsoReg}/states/${e.target.value}/cities`,
                                 {
                                   headers: {
-                                    "X-CSCAPI-KEY": "TU_API_KEY_AQUI",
+                                    "X-CSCAPI-KEY":
+                                      "b7744cb1f6d720120baf2130c8f232e86c5baa721afb2c52ea3e9e687242772b",
                                   },
                                 },
                               )
