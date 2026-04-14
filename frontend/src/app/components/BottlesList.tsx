@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { MapaVendedores } from "./MapaVendedores";
 import {
   Search,
   Filter,
@@ -360,6 +361,7 @@ export function BottlesList() {
           ))}
         </div>
       )}
+      
 
       {!loading && filteredListings.length === 0 && (
         <Card className="border-dashed">
