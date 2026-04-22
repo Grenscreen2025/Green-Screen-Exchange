@@ -176,6 +176,16 @@ export function Auth() {
     setLoading(false);
   };
 
+  const testLogin = async () => {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: "ana.morales4@mercadoverde.com",
+        password: "12345678",
+      });
+      console.log("DATA:", data);
+      console.log("ERROR:", error);
+      alert(error ? error.message : "¡Login exitoso! " + data.user?.email);
+    };
+
   /* ── Pantalla de confirmación ── */
   if (showConfirmation) {
     return (
@@ -229,6 +239,17 @@ export function Auth() {
           </CardHeader>
 
           <CardContent>
+            <button
+              onClick={testLogin}
+              style={{
+                background: "red",
+                color: "white",
+                padding: "10px",
+                margin: "10px",
+              }}
+            >
+              TEST LOGIN DATASET
+            </button>
             <Tabs
               value={activeTab}
               onValueChange={(v) => setActiveTab(v as "login" | "register")}
