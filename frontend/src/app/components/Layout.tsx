@@ -61,7 +61,7 @@ export function Layout({ children }: LayoutProps) {
             >
               <Logo className="size-8" />
               <span className="text-xl font-semibold text-foreground">
-                GreenScript Exchange
+                Mercado Verde
               </span>
             </Link>
 

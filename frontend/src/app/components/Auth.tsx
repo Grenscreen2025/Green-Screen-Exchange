@@ -226,9 +226,9 @@ export function Auth() {
         <Link to="/" className="flex items-center justify-center gap-2 mb-8">
           <Recycle className="size-10 text-primary" />
           <span className="text-2xl font-semibold text-foreground">
-            GreenScript Exchange
+            Mercado Verde
           </span>
-        </Link>
+        </Link>x
 
         <Card className="border-green-100 shadow-xl">
           <CardHeader className="space-y-1">
@@ -239,17 +239,6 @@ export function Auth() {
           </CardHeader>
 
           <CardContent>
-            <button
-              onClick={testLogin}
-              style={{
-                background: "red",
-                color: "white",
-                padding: "10px",
-                margin: "10px",
-              }}
-            >
-              TEST LOGIN DATASET
-            </button>
             <Tabs
               value={activeTab}
               onValueChange={(v) => setActiveTab(v as "login" | "register")}

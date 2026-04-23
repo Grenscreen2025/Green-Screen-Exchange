@@ -121,7 +121,7 @@ export function BottlesList() {
   const handleContactar = (listing: BottleListing) => {
     const phone = listing.telefono?.replace(/\D/g, "") || "";
     const message = encodeURIComponent(
-      `Hola ${listing.seller}! Vi tu publicación en GreenScript Exchange sobre ${listing.bottleType} (${listing.quantity} unidades a ${listing.moneda} ${listing.pricePerUnit}/unidad). ¿Está disponible?`,
+      `Hola ${listing.seller}! Vi tu publicación en Mercado Verde sobre ${listing.bottleType} (${listing.quantity} unidades a ${listing.moneda} ${listing.pricePerUnit}/unidad). ¿Está disponible?`,
     );
     const url = phone
       ? `https://wa.me/${phone}?text=${message}`

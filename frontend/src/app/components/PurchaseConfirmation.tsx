@@ -308,7 +308,7 @@ export function PurchaseConfirmation() {
                     <li>Esta es una solicitud de compra que debe ser confirmada por el vendedor</li>
                     <li>Coordina directamente con el vendedor los detalles finales</li>
                     <li>Verifica el material antes de realizar el pago completo</li>
-                    <li>GreenScript Exchange facilita la conexión pero no procesa pagos</li>
+                    <li>Mercado Verde facilita la conexión pero no procesa pagos</li>
                   </ul>
                 </div>
               </div>

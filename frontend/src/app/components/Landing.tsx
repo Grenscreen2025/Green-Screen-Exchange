@@ -95,7 +95,7 @@ export function Landing() {
   const handleContactWhatsApp = (product: Product) => {
     const phone = product.seller_phone?.replace(/\D/g, '') || '';
     const message = encodeURIComponent(
-      `Hola ${product.seller}! Vi tu publicación en GreenScript Exchange sobre ${product.bottleType} (${product.quantity} unidades a $${product.price}/unidad). ¿Está disponible?`
+      `Hola ${product.seller}! Vi tu publicación enMercado Verde sobre ${product.bottleType} (${product.quantity} unidades a $${product.price}/unidad). ¿Está disponible?`
     );
     const url = phone
       ? `https://wa.me/${phone}?text=${message}`
@@ -115,7 +115,7 @@ export function Landing() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Logo className="h-8 w-8 text-green-600" />
-              <span className="text-xl font-semibold text-foreground">GreenScript Exchange</span>
+              <span className="text-xl font-semibold text-foreground">Mercado Verde</span>
             </div>
             <nav className="hidden md:flex items-center gap-6">
               <a href="#" className="text-foreground hover:text-primary transition-colors">Inicio</a>
@@ -216,7 +216,7 @@ export function Landing() {
       <section id="como-funciona" className="bg-gradient-to-b from-gray-50 to-white py-16">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-foreground mb-4">¿Por qué GreenScript Exchange?</h2>
+            <h2 className="text-3xl font-bold text-foreground mb-4">¿Por qué Mercado Verde?</h2>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
             {[
@@ -253,7 +253,7 @@ export function Landing() {
       {/* Footer */}
       <footer id="contacto" className="border-t bg-gray-50 py-8">
         <div className="container mx-auto px-4 text-center text-muted-foreground">
-          <p>&copy; 2026 GreenScript Exchange. Proyecto universitario de impacto ambiental.</p>
+          <p>&copy; 2026 Mercado verde. Proyecto universitario de impacto ambiental.</p>
         </div>
       </footer>
 
