@@ -228,7 +228,7 @@ export function Auth() {
           <span className="text-2xl font-semibold text-foreground">
             Mercado Verde
           </span>
-        </Link>x
+        </Link>
 
         <Card className="border-green-100 shadow-xl">
           <CardHeader className="space-y-1">

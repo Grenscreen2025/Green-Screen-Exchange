@@ -1,113 +1,285 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router';
-import { Package, DollarSign, FileText, CheckCircle2, MapPin } from 'lucide-react';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { Textarea } from './ui/textarea';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
-import { toast } from 'sonner';
-import { supabase } from './supabaseClient';
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router";
+import {
+  Package,
+  DollarSign,
+  FileText,
+  CheckCircle2,
+  MapPin,
+  Search,
+} from "lucide-react";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Textarea } from "./ui/textarea";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
+import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
+import { toast } from "sonner";
+import { supabase } from "./supabaseClient";
 
-function MapController({ center, zoom }: { center: [number, number]; zoom: number }) {
+function MapController({
+  center,
+  zoom,
+}: {
+  center: [number, number];
+  zoom: number;
+}) {
   const map = useMap();
-  useEffect(() => { map.flyTo(center, zoom, { duration: 1.5 }); }, [center, zoom]);
+
+  useEffect(() => {
+    map.flyTo(center, zoom, { duration: 1.5 });
+
+    // 🔥 FORZAR REFRESH DEL MAPA
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 200);
+  }, [center, zoom]);
+
+  return null;
+}
+function MapClickHandler({ onClick }: { onClick: () => void }) {
+  const map = useMap();
+
+  useEffect(() => {
+    map.on("click", onClick);
+
+    return () => {
+      map.off("click", onClick);
+    };
+  }, [map, onClick]);
+
   return null;
 }
 
 export function PublishBottles() {
   const navigate = useNavigate();
-  const userType = localStorage.getItem('userType') || 'recycler';
-  const moneda = localStorage.getItem('userMoneda') || 'COP';
-  const isRecycler = userType === 'recycler';
+  const userType = localStorage.getItem("userType") || "recycler";
+  const moneda = localStorage.getItem("userMoneda") || "COP";
+  const isRecycler = userType === "recycler";
 
   const [formData, setFormData] = useState({
-    quantity: '',
-    bottleType: '',
-    pricePerUnit: '',
-    description: '',
-    titulo: '',
+    quantity: "",
+    bottleType: "",
+    pricePerUnit: "",
+    description: "",
+    titulo: "",
   });
 
-  const [mapCenter, setMapCenter] = useState<[number, number]>([4.5709, -74.2973]);
+  const [mapCenter, setMapCenter] = useState<[number, number]>([
+    4.5709, -74.2973,
+  ]);
   const [mapZoom, setMapZoom] = useState(5);
   const [marker, setMarker] = useState<[number, number] | null>(null);
-  const [busqueda, setBusqueda] = useState('');
+  const [busqueda, setBusqueda] = useState("");
   const [sugerencias, setSugerencias] = useState<any[]>([]);
   const [buscando, setBuscando] = useState(false);
-  const [ubicacionNombre, setUbicacionNombre] = useState('');
+  const [ubicacionNombre, setUbicacionNombre] = useState("");
+  const [ubicacionData, setUbicacionData] = useState<any>(null);
+  const [ubicacionId, setUbicacionId] = useState<number | null>(null);
   const busquedaTimer = useRef<any>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const bottleTypes = [
-    { value: 'pet', label: 'PET (Polietileno Tereftalato)' },
-    { value: 'hdpe', label: 'HDPE (Polietileno de Alta Densidad)' },
-    { value: 'pvc', label: 'PVC (Policloruro de Vinilo)' },
-    { value: 'ldpe', label: 'LDPE (Polietileno de Baja Densidad)' },
-    { value: 'pp', label: 'PP (Polipropileno)' },
-    { value: 'ps', label: 'PS (Poliestireno)' },
-  ];
+  const [bottleTypes, setBottleTypes] = useState<any[]>([]);
+  useEffect(() => {
+    const fetchTipos = async () => {
+      const { data, error } = await supabase.from("tipos_botella").select("*");
+
+      console.log("TIPOS BOTELLA:", data, error); // 👈
+
+      if (!error) setBottleTypes(data || []);
+    };
+
+    fetchTipos();
+  }, []);
 
   const handleChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleBusqueda = (e: React.ChangeEvent<HTMLInputElement>) => {
     const q = e.target.value;
     setBusqueda(q);
+
     if (busquedaTimer.current) clearTimeout(busquedaTimer.current);
-    if (q.length < 3) { setSugerencias([]); return; }
+
+    if (q.length < 3) {
+      setSugerencias([]);
+      return;
+    }
+
     setBuscando(true);
+
     busquedaTimer.current = setTimeout(async () => {
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&accept-language=es`;
-      const res = await fetch(url);
-      const data = await res.json();
-      setSugerencias(data);
+      try {
+        const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6`;
+
+        const res = await fetch(url);
+        const data = await res.json();
+
+        console.log("RESULTADOS PHOTON:", data);
+        console.log("CENTER ANTES:", mapCenter);
+
+        setSugerencias(data.features || []); // 🔥 Photon usa "features"
+      } catch {
+        setSugerencias([]);
+      }
+
       setBuscando(false);
-    }, 600);
+    }, 250);
   };
 
   const seleccionarSugerencia = (item: any) => {
-    const lat = parseFloat(item.lat);
-    const lng = parseFloat(item.lon);
+    const [lng, lat] = item.geometry.coordinates;
+    const props = item.properties;
+
+    const barrio =
+      props.district ||
+      props.suburb ||
+      props.neighbourhood ||
+      props.name ||
+      "Sin nombre";
+
+    const ciudad = props.city || props.county || props.state || "";
+    const pais = props.country || "Colombia";
+
+    // 👉 mover mapa
     setMapCenter([lat, lng]);
-    setMapZoom(17);
+    setMapZoom(15);
     setMarker([lat, lng]);
-    setUbicacionNombre(item.display_name.split(',').slice(0, 2).join(','));
-    setBusqueda(item.display_name.split(',')[0]);
+
+    // 👉 UI
+    setUbicacionNombre(barrio);
+    setBusqueda(barrio);
     setSugerencias([]);
+
+    // 👉 🔥 GUARDAR TEMPORAL (esto es lo clave)
+    setUbicacionData({
+      barrio,
+      ciudad,
+      pais,
+      lat,
+      lng,
+    });
+
+    console.log("Ubicación seleccionada (temporal):", {
+      barrio,
+      ciudad,
+      pais,
+      lat,
+      lng,
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { toast.error('Debes iniciar sesión'); setLoading(false); return; }
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { data: userAuth } = await supabase.auth.getUser();
+    const { data } = await supabase.from("tipos_botella").select("*");
+    const { data: usuario } = await supabase
+      .from("usuarios")
+      .select("id_usuario")
+      .eq("correo", userAuth.user.email)
+      .single();
+    // 🚨 validar que haya ubicación
+    if (!ubicacionData) {
+      toast.error("Debes seleccionar una ubicación en el mapa");
+      setLoading(false);
+      return;
+    }
 
-    const { error } = await supabase.from('publicaciones').insert({
-      id_usuario: user.id,
-      cantidad: parseInt(formData.quantity),
-      precio_por_unidad: parseFloat(formData.pricePerUnit),
+    const { barrio, ciudad, pais, lat, lng } = ubicacionData;
+
+    let idUbicacion = null;
+
+    // 🔍 1. buscar si ya existe
+    const { data: existente, error: errorBusqueda } = await supabase
+      .from("ubicaciones")
+      .select("*")
+      .eq("ciudad", ciudad)
+      .eq("barrio", barrio)
+      .maybeSingle();
+
+    if (errorBusqueda) {
+      console.error("Error buscando ubicación:", errorBusqueda);
+      setLoading(false);
+      return;
+    }
+
+    if (existente) {
+      // ✅ usar existente
+      idUbicacion = existente.id_ubicacion;
+      console.log("Ubicación existente:", idUbicacion);
+    } else {
+      // 🆕 crear nueva
+      const { data: nueva, error: errorInsert } = await supabase
+        .from("ubicaciones")
+        .insert({
+          pais,
+          ciudad,
+          zona: "urbana",
+          barrio,
+          lat,
+          lng,
+        })
+        .select()
+        .single();
+
+      if (errorInsert) {
+        console.error("Error creando ubicación:", errorInsert);
+        setLoading(false);
+        return;
+      }
+
+      idUbicacion = nueva.id_ubicacion;
+      console.log("Nueva ubicación creada:", idUbicacion);
+    }
+    if (!user) {
+      toast.error("Debes iniciar sesión");
+      setLoading(false);
+      return;
+    }
+
+    const { error } = await supabase.from("publicaciones").insert({
+      id_usuario: usuario.id_usuario,
+      id_ubicacion: idUbicacion,
+      id_tipo_botella: parseInt(formData.bottleType),
+      cantidad_unidades: parseInt(formData.quantity),
+      precio_unitario: parseFloat(formData.pricePerUnit),
       descripcion: formData.description,
-      titulo: formData.titulo || `${formData.bottleType} - ${formData.quantity} unidades`,
-      estado: 'activa',
-      moneda,
-      fecha_publicacion: new Date().toISOString().split('T')[0],
+      titulo:
+        formData.titulo ||
+        `${formData.bottleType} - ${formData.quantity} unidades`,
+      estado: "activa",
+      fecha_publicacion: new Date().toISOString().split("T")[0],
     });
 
     if (error) {
-      toast.error('Error al publicar: ' + error.message);
+      toast.error("Error al publicar: " + error.message);
       setLoading(false);
       return;
     }
 
     setShowSuccess(true);
     setLoading(false);
-    setTimeout(() => navigate('/bottles'), 2000);
+    setTimeout(() => navigate("/bottles"), 2000);
   };
 
   if (showSuccess) {
@@ -118,11 +290,16 @@ export function PublishBottles() {
             <div className="size-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <CheckCircle2 className="size-12 text-green-600" />
             </div>
-            <h2 className="text-2xl font-bold text-foreground mb-2">¡Publicación Exitosa!</h2>
+            <h2 className="text-2xl font-bold text-foreground mb-2">
+              ¡Publicación Exitosa!
+            </h2>
             <p className="text-muted-foreground mb-6">
-              Tu {isRecycler ? 'oferta' : 'solicitud'} de botellas ha sido publicada correctamente
+              Tu {isRecycler ? "oferta" : "solicitud"} de botellas ha sido
+              publicada correctamente
             </p>
-            <div className="text-sm text-muted-foreground">Redirigiendo al listado de botellas...</div>
+            <div className="text-sm text-muted-foreground">
+              Redirigiendo al listado de botellas...
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -133,15 +310,18 @@ export function PublishBottles() {
     <div className="max-w-5xl mx-auto space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-foreground">
-          {isRecycler ? 'Publicar Botellas para Venta' : 'Publicar Solicitud de Compra'}
+          {isRecycler
+            ? "Publicar Botellas para Venta"
+            : "Publicar Solicitud de Compra"}
         </h1>
         <p className="text-muted-foreground mt-2">
-          {isRecycler ? 'Ofrece tus botellas reciclables a centros de acopio' : 'Publica los tipos de botellas que deseas comprar'}
+          {isRecycler
+            ? "Ofrece tus botellas reciclables a centros de acopio"
+            : "Publica los tipos de botellas que deseas comprar"}
         </p>
       </div>
 
       <div className="grid grid-cols-2 gap-6">
-
         {/* COLUMNA IZQUIERDA - Formulario */}
         <Card className="border-green-100">
           <CardHeader>
@@ -150,7 +330,8 @@ export function PublishBottles() {
               Información de la Publicación
             </CardTitle>
             <CardDescription>
-              Completa los detalles para {isRecycler ? 'vender' : 'comprar'} botellas
+              Completa los detalles para {isRecycler ? "vender" : "comprar"}{" "}
+              botellas
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -161,7 +342,7 @@ export function PublishBottles() {
                   id="titulo"
                   placeholder="Ej: Botellas PET limpias disponibles"
                   value={formData.titulo}
-                  onChange={(e) => handleChange('titulo', e.target.value)}
+                  onChange={(e) => handleChange("titulo", e.target.value)}
                   required
                 />
               </div>
@@ -176,18 +357,32 @@ export function PublishBottles() {
                     placeholder="Ej: 500"
                     className="pl-10"
                     value={formData.quantity}
-                    onChange={(e) => handleChange('quantity', e.target.value)}
-                    required min="1"
+                    onChange={(e) => handleChange("quantity", e.target.value)}
+                    required
+                    min="1"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
                 <Label>Tipo de Plástico</Label>
-                <Select value={formData.bottleType} onValueChange={(v) => handleChange('bottleType', v)}>
-                  <SelectTrigger><SelectValue placeholder="Selecciona el tipo" /></SelectTrigger>
+                <Select
+                  value={formData.bottleType}
+                  onValueChange={(v) => handleChange("bottleType", v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona el tipo" />
+                  </SelectTrigger>
+
                   <SelectContent>
-                    {bottleTypes.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                    {bottleTypes.map((t) => (
+                      <SelectItem
+                        key={t.id_tipo_botella}
+                        value={t.id_tipo_botella.toString()}
+                      >
+                        {t.nombre}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -203,11 +398,16 @@ export function PublishBottles() {
                     placeholder="Ej: 150"
                     className="pl-10"
                     value={formData.pricePerUnit}
-                    onChange={(e) => handleChange('pricePerUnit', e.target.value)}
-                    required min="0.01"
+                    onChange={(e) =>
+                      handleChange("pricePerUnit", e.target.value)
+                    }
+                    required
+                    min="0.01"
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">Precio en {moneda}</p>
+                <p className="text-xs text-muted-foreground">
+                  Precio en {moneda}
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -219,7 +419,9 @@ export function PublishBottles() {
                     placeholder="Estado, limpieza, condiciones especiales..."
                     className="pl-10 min-h-[100px]"
                     value={formData.description}
-                    onChange={(e) => handleChange('description', e.target.value)}
+                    onChange={(e) =>
+                      handleChange("description", e.target.value)
+                    }
                   />
                 </div>
               </div>
@@ -229,9 +431,15 @@ export function PublishBottles() {
                   <CardContent className="pt-4 pb-4">
                     <div className="flex justify-between items-center">
                       <div>
-                        <div className="text-sm text-muted-foreground">Total Estimado</div>
+                        <div className="text-sm text-muted-foreground">
+                          Total Estimado
+                        </div>
                         <div className="text-2xl font-bold text-primary">
-                          {moneda} {(parseFloat(formData.quantity) * parseFloat(formData.pricePerUnit)).toLocaleString()}
+                          {moneda}{" "}
+                          {(
+                            parseFloat(formData.quantity) *
+                            parseFloat(formData.pricePerUnit)
+                          ).toLocaleString()}
                         </div>
                       </div>
                       <div className="text-right text-sm text-muted-foreground">
@@ -243,11 +451,22 @@ export function PublishBottles() {
               )}
 
               <div className="flex gap-4 pt-2">
-                <Button type="button" variant="outline" onClick={() => navigate('/dashboard')} className="flex-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => navigate("/dashboard")}
+                  className="flex-1"
+                >
                   Cancelar
                 </Button>
-                <Button type="submit" className="flex-1 bg-primary hover:bg-green-600" disabled={loading}>
-                  {loading ? 'Publicando...' : `Publicar ${isRecycler ? 'Oferta' : 'Solicitud'}`}
+                <Button
+                  type="submit"
+                  className="flex-1 bg-primary hover:bg-green-600"
+                  disabled={loading}
+                >
+                  {loading
+                    ? "Publicando..."
+                    : `Publicar ${isRecycler ? "Oferta" : "Solicitud"}`}
                 </Button>
               </div>
             </form>
@@ -255,7 +474,7 @@ export function PublishBottles() {
         </Card>
 
         {/* COLUMNA DERECHA - Mapa */}
-        <div className="space-y-4">
+        <div className="space-y-3 relative">
           <Card className="border-green-100">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -267,33 +486,80 @@ export function PublishBottles() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {/* Buscador */}
+              {/* Buscador mejorado */}
               <div className="relative">
-                <input
-                  type="text"
-                  value={busqueda}
-                  onChange={handleBusqueda}
-                  placeholder="Busca parque, barrio, dirección..."
-                  className="w-full border rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
-                {buscando && <div className="absolute right-3 top-2 text-xs text-muted-foreground">Buscando...</div>}
-                {sugerencias.length > 0 && (
-                  <div className="absolute z-50 w-full bg-white border rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto">
-                    {sugerencias.map((s, i) => (
-                      <button key={i} type="button" onClick={() => seleccionarSugerencia(s)}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-green-50 border-b last:border-0">
-                        📍 {s.display_name}
-                      </button>
-                    ))}
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 size-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={busqueda}
+                    onChange={handleBusqueda}
+                    placeholder={`Busca barrio o comuna en ${localStorage.getItem("userCiudad") || "tu ciudad"}...`}
+                    className="w-full border rounded-md pl-10 pr-4 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                    onBlur={() => {
+                      setTimeout(() => {
+                        if (!busqueda) setSugerencias([]);
+                      }, 200);
+                    }}
+                  />
+                  {buscando && (
+                    <div className="absolute right-3 top-2 text-xs text-muted-foreground animate-pulse">
+                      Buscando...
+                    </div>
+                  )}
+                </div>
+
+                {sugerencias?.length > 0 && (
+                  <div className="absolute z-[9999] w-full bg-white border rounded-md shadow-lg mt-1 max-h-56 overflow-y-auto">
+                    {sugerencias.map((s: any, i: number) => {
+                      const nombre = s.properties.name;
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => {
+                            console.log("CLICK ITEM");
+                            seleccionarSugerencia(s);
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-green-50 border-b last:border-0 flex items-start gap-2"
+                        >
+                          <MapPin className="size-3 text-primary mt-1 shrink-0" />
+                          <div>
+                            <div>
+                              <div className="font-medium">
+                                {s.properties.name || "Ubicación"}
+                              </div>
+
+                              <div className="text-xs text-muted-foreground">
+                                {s.properties.city ||
+                                  s.properties.state ||
+                                  s.properties.country}
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
 
               {/* Mapa */}
-              <div className="rounded-lg overflow-hidden border border-green-100" style={{ height: '380px' }}>
-                <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: '100%', width: '100%' }}>
+              <div
+                className="rounded-lg border border-green-100 relative z-0"
+                style={{ height: "380px" }}
+              >
+                <MapContainer
+                  center={mapCenter}
+                  zoom={mapZoom}
+                  style={{ height: "100%", width: "100%" }}
+                >
                   <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+
                   <MapController center={mapCenter} zoom={mapZoom} />
+
+                  <MapClickHandler onClick={() => setSugerencias([])} />
+
                   {marker && <Marker position={marker} />}
                 </MapContainer>
               </div>
@@ -311,7 +577,7 @@ export function PublishBottles() {
             </CardContent>
           </Card>
         </div>
-
+        
       </div>
     </div>
   );
