@@ -21,8 +21,8 @@ Promover el reciclaje a través de un sistema de incentivos, facilitando la cone
 - `/evidencias`: pruebas de avances
 
 ## 🚀 Tecnologías usadas
-- HTML/CSS/JS (frontend)
-- Python / Node.js / PHP (según lo que uses en backend)
+- HTML/CSS/JS/JSX
+- Supabase React 
 - Git y GitHub
 
 ## 📝 Licencia
