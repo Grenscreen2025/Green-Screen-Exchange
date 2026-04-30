@@ -1,6 +1,6 @@
-# GreenScript Exchange ♻️
+# Mercado Verde ♻️
 
-GreenScript Exchange es una plataforma web para la compra y venta de botellas reciclables, con enfoque en sostenibilidad ambiental.
+Mercado Verde es una plataforma web para la compra y venta de botellas reciclables, con enfoque en sostenibilidad ambiental.
 
 ## 🌱 Objetivo
 Promover el reciclaje a través de un sistema de incentivos, facilitando la conexión entre usuarios que recolectan botellas y empresas recicladoras.
@@ -12,18 +12,13 @@ Promover el reciclaje a través de un sistema de incentivos, facilitando la cone
 - Jhelen Zilena Quintas Chalapud
 
 ## 📂 Contenido del repositorio
-- `/docs`: documentación y presentaciones
 - `/frontend`: interfaz de usuario
 - `/backend`: lógica del servidor o base de datos
-- `/algorithms`: pseudocódigo de funciones principales
-- `/requirements`: requerimientos del proyecto
-- `/cronograma`: planificación del proyecto
 - `/evidencias`: pruebas de avances
 
 ## 🚀 Tecnologías usadas
-- HTML/CSS/JS/JSX
-- Supabase React 
-- Git y GitHub
+- React con TypeScript (frontend)
+- PostgreSQL, Supabase (Backend)
 
 ## 📝 Licencia
 [MIT License](LICENSE)
