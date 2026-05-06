@@ -18,6 +18,26 @@ import { toast } from "sonner";
 import { supabase } from "./supabaseClient";
 
 export function Auth() {
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetSent, setResetSent] = useState(false);
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+
+    if (error) {
+      toast.error("Error al enviar el correo: " + error.message);
+    } else {
+      setResetSent(true);
+      toast.success("Correo de recuperación enviado");
+    }
+    setLoading(false);
+  };
   const [paisesReg, setPaisesReg] = useState<any[]>([]);
   const [depsReg, setDepsReg] = useState<any[]>([]);
   const [ciudadesReg, setCiudadesReg] = useState<any[]>([]);
@@ -95,18 +115,21 @@ export function Auth() {
       return;
     }
 
-    // Obtener tipo_usuario real desde la tabla usuarios
+    // Obtener datos reales desde tabla usuarios
     const { data: usuarioData } = await supabase
       .from("usuarios")
-      .select("tipo_usuario, nombre, moneda")
+      .select("id_usuario, tipo_usuario, nombre, moneda, pais, ciudad_base")
       .eq("correo", data.user.email)
       .single();
 
-    localStorage.setItem("userId", data.user.id);
+    // Guardar id_usuario INTEGER no UUID
+    localStorage.setItem("userId", usuarioData?.id_usuario?.toString() || "");
     localStorage.setItem("userEmail", data.user.email || "");
     localStorage.setItem("userName", usuarioData?.nombre || "");
     localStorage.setItem("userType", usuarioData?.tipo_usuario || "recycler");
     localStorage.setItem("userMoneda", usuarioData?.moneda || "COP");
+    localStorage.setItem("userPais", usuarioData?.pais || "");
+    localStorage.setItem("userCiudad", usuarioData?.ciudad_base || "");
 
     toast.success("¡Bienvenido!");
     navigate("/dashboard");
@@ -177,46 +200,78 @@ export function Auth() {
   };
 
   const testLogin = async () => {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: "ana.morales4@mercadoverde.com",
-        password: "12345678",
-      });
-      console.log("DATA:", data);
-      console.log("ERROR:", error);
-      alert(error ? error.message : "¡Login exitoso! " + data.user?.email);
-    };
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: "ana.morales4@mercadoverde.com",
+      password: "12345678",
+    });
+    console.log("DATA:", data);
+    console.log("ERROR:", error);
+    alert(error ? error.message : "¡Login exitoso! " + data.user?.email);
+  };
 
   /* ── Pantalla de confirmación ── */
   if (showConfirmation) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-green-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          <Card className="border-green-100 shadow-xl text-center">
+      <>
+        {/* MODAL recuperar contraseña */}
+        {showForgotPassword && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className="w-full max-w-md border-green-100 shadow-xl">
+              <CardHeader>
+                <CardTitle className="text-xl">Recuperar Contraseña</CardTitle>
+                <CardDescription>
+                  Te enviaremos un enlace para restablecer tu contraseña
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {resetSent ? (
+                  <div className="text-center space-y-4">
+                    <Mail className="size-12 text-primary mx-auto" />
+                    <p className="text-sm text-muted-foreground">
+                      Revisa tu correo y haz clic en el enlace
+                    </p>
+                    <Button
+                      className="w-full bg-primary hover:bg-green-600"
+                      onClick={() => {
+                        setShowForgotPassword(false);
+                        setResetSent(false);
+                      }}
+                    >
+                      Volver al login
+                    </Button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleForgotPassword} className="space-y-4">
+                    <Input
+                      type="email"
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      required
+                    />
+                    <Button type="submit" className="w-full">
+                      Enviar enlace
+                    </Button>
+                  </form>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* PANTALLA DE CONFIRMACIÓN */}
+        <div className="min-h-screen flex items-center justify-center">
+          <Card className="text-center">
             <CardHeader>
-              <div className="mx-auto mb-4 size-16 rounded-full bg-green-100 flex items-center justify-center">
-                <Mail className="size-8 text-primary" />
-              </div>
-              <CardTitle className="text-2xl">¡Revisa tu correo!</CardTitle>
-              <CardDescription>
-                Te enviamos un enlace de verificación. Haz clic en él para
-                activar tu cuenta.
-              </CardDescription>
+              <CardTitle>¡Revisa tu correo!</CardTitle>
             </CardHeader>
             <CardContent>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => setShowConfirmation(false)}
-              >
-                Volver al inicio de sesión
-              </Button>
+              <Button onClick={() => setShowConfirmation(false)}>Volver</Button>
             </CardContent>
           </Card>
         </div>
-      </div>
+      </>
     );
   }
-
   /* ── Layout principal ── */
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-green-50 flex items-center justify-center p-4">
@@ -285,6 +340,13 @@ export function Auth() {
                   >
                     {loading ? "Iniciando sesión..." : "Iniciar Sesión"}
                   </Button>
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="w-full text-sm text-muted-foreground hover:text-primary text-center mt-2"
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </button>
                 </form>
               </TabsContent>
 

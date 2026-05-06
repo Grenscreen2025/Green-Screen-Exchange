@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Logo } from './logo';
+import { useState, useEffect, useRef } from "react";
+import { Logo } from "./logo";
 import { Link } from "react-router";
 import {
   Package,
@@ -23,6 +23,9 @@ import {
 } from "./ui/card";
 import { Progress } from "./ui/progress";
 import { Button } from "./ui/button";
+import { supabase } from "./supabaseClient";
+import { useNavigate } from "react-router";
+
 
 interface Transaction {
   id: number;
@@ -46,8 +49,8 @@ interface Publication {
 }
 
 export function Dashboard() {
-  const userType =
-    localStorage.getItem("userType") || "recycler";
+  const navigate = useNavigate();
+  const userType = localStorage.getItem("userType") || "recycler";
   const isRecycler = userType === "recycler";
 
   const [stats] = useState({
@@ -57,77 +60,170 @@ export function Dashboard() {
     monthlyGrowth: 12.5,
   });
 
-  // Publicaciones para recicladores
-  const [recentPublications] = useState<Publication[]>([
-    {
-      id: 1,
-      title: "Botellas PET 500ml Transparentes",
-      quantity: 150,
-      price: 225.0,
-      location: "Bogotá, Colombia",
-      views: 45,
-      interested: 8,
-      date: "2026-02-20",
-      status: "active",
-    },
-    {
-      id: 2,
-      title: "Botellas PET 1L Variadas",
-      quantity: 200,
-      price: 300.0,
-      location: "Medellín, Colombia",
-      views: 67,
-      interested: 12,
-      date: "2026-02-18",
-      status: "active",
-    },
-    {
-      id: 3,
-      title: "Botellas PET 2L Azules",
-      quantity: 100,
-      price: 180.0,
-      location: "Cali, Colombia",
-      views: 23,
-      interested: 4,
-      date: "2026-02-15",
-      status: "sold",
-    },
-  ]);
+  // Publicaciones para recicladores y centros de acopio
+  const [recentTransactions, setRecentTransactions] = useState<Transaction[]>(
+    [],
+  );
+  const [recentPublications, setRecentPublications] = useState<Publication[]>(
+    [],
+  );
+  const [topSuppliers, setTopSuppliers] = useState<any[]>([]);
+  const userId = localStorage.getItem("userId");
 
-  // Datos para Centro de Acopio
-  const [topSuppliers] = useState([
-    { name: "María González", bottles: 850, transactions: 12, rating: 4.8 },
-    { name: "Carlos Ruiz", bottles: 720, transactions: 10, rating: 4.9 },
-    { name: "Ana Torres", bottles: 650, transactions: 9, rating: 4.7 },
-    { name: "José Martínez", bottles: 580, transactions: 8, rating: 4.6 },
-  ]);
+  const handleDelete = async (id: number) => {
+    const confirmDelete = confirm("¿Seguro que quieres eliminar?");
+    if (!confirmDelete) return;
 
-  const [recentTransactions] = useState<Transaction[]>([
-    {
-      id: 1,
-      type: isRecycler ? "sale" : "purchase",
-      bottles: 150,
-      price: 225.0,
-      date: "2026-02-10",
-      partner: isRecycler ? "Centro Verde SA" : "María González",
-    },
-    {
-      id: 2,
-      type: isRecycler ? "sale" : "purchase",
-      bottles: 200,
-      price: 300.0,
-      date: "2026-02-08",
-      partner: isRecycler ? "EcoAcopio Ltda" : "Carlos Ruiz",
-    },
-    {
-      id: 3,
-      type: isRecycler ? "sale" : "purchase",
-      bottles: 100,
-      price: 150.0,
-      date: "2026-02-05",
-      partner: isRecycler ? "Recicladores Unidos" : "Ana Torres",
-    },
-  ]);
+    const { error } = await supabase
+      .from("publicaciones")
+      .update({ eliminado: true })
+      .eq("id_publicacion", id);
+
+    if (error) {
+      alert("Error: " + error.message);
+      return;
+    }
+
+    // ocultar en UI
+    setRecentPublications((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  useEffect(() => {
+    const fetchData = async () => {
+      // 🔐 1. obtener usuario auth
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      // 🔥 2. obtener id_usuario real
+      const { data: usuario } = await supabase
+        .from("usuarios")
+        .select("id_usuario")
+        .eq("correo", user.email)
+        .single();
+
+      if (!usuario) return;
+
+      const idUsuario = usuario.id_usuario;
+
+      console.log("ID USUARIO:", idUsuario);
+
+      // 🔹 TOP PROVEEDORES (solo centro de acopio)
+      if (!isRecycler) {
+        const { data: proveedores } = await supabase
+          .from("transacciones")
+          .select(
+            `
+          id_vendedor,
+          cantidad,
+          usuarios!id_vendedor (nombre, calificacion_promedio)
+        `,
+          )
+          .order("cantidad", { ascending: false })
+          .limit(20);
+
+        if (proveedores) {
+          const agrupado: Record<number, any> = {};
+
+          proveedores.forEach((t: any) => {
+            const id = t.id_vendedor;
+
+            if (!agrupado[id]) {
+              agrupado[id] = {
+                name: t.usuarios?.nombre || "Usuario",
+                bottles: 0,
+                transactions: 0,
+                rating: t.usuarios?.calificacion_promedio || 0,
+              };
+            }
+
+            agrupado[id].bottles += t.cantidad;
+            agrupado[id].transactions += 1;
+          });
+
+          setTopSuppliers(
+            Object.values(agrupado)
+              .sort((a: any, b: any) => b.bottles - a.bottles)
+              .slice(0, 4),
+          );
+        }
+      }
+
+      // 🔹 PUBLICACIONES DEL USUARIO
+      const { data: pubs, error: pubError } = await supabase
+        .from("publicaciones")
+        .select(
+          `
+        id_publicacion,
+        titulo,
+        cantidad_unidades,
+        precio_unitario,
+        fecha_publicacion,
+        estado,
+        ubicaciones!id_ubicacion (ciudad, pais)
+      `,
+        )
+        .eq("id_usuario", idUsuario)
+        .eq("eliminado", false)
+        .order("fecha_publicacion", { ascending: false })
+        .limit(5);
+
+      console.log("PUBLICACIONES:", pubs);
+
+      if (!pubError && pubs) {
+        setRecentPublications(
+          pubs.map((p: any) => ({
+            id: p.id_publicacion,
+            title: p.titulo,
+            quantity: p.cantidad_unidades,
+            price: p.precio_unitario,
+            location: p.ubicaciones
+              ? `${p.ubicaciones.ciudad}, ${p.ubicaciones.pais}`
+              : "Sin ubicación",
+            views: 0,
+            interested: 0,
+            date: p.fecha_publicacion,
+            status: p.estado,
+          })),
+        );
+      }
+
+      // 🔹 TRANSACCIONES DEL USUARIO
+      const { data: trans } = await supabase
+        .from("transacciones")
+        .select(
+          `
+    id_transaccion,
+    cantidad_unidades,
+    precio_total_usd,
+    fecha_transaccion,
+    id_comprador,
+    id_vendedor
+  `,
+        )
+        .or(`id_comprador.eq.${userId},id_vendedor.eq.${userId}`)
+        .order("fecha_transaccion", { ascending: false })
+        .limit(5);
+
+      if (trans) {
+        setRecentTransactions(
+          trans.map((t: any) => ({
+            id: t.id_transaccion,
+            type:
+              t.id_vendedor === parseInt(userId || "0") ? "sale" : "purchase",
+            bottles: t.cantidad_unidades,
+            price: t.precio_total_usd,
+            date: t.fecha_transaccion,
+            partner: "Usuario",
+          })),
+        );
+      }
+    };
+
+    fetchData();
+  }, []);
 
   return (
     <div className="space-y-8">
@@ -136,9 +232,7 @@ export function Dashboard() {
         <div className="flex items-center gap-3 mb-2">
           <Logo className="h-8 w-8 text-green-600" />
           <h1 className="text-3xl font-bold text-foreground">
-            {isRecycler
-              ? "Panel de Reciclador"
-              : "Panel de Centro de Acopio"}
+            {isRecycler ? "Panel de Reciclador" : "Panel de Centro de Acopio"}
           </h1>
         </div>
         <p className="text-muted-foreground mt-2">
@@ -153,9 +247,7 @@ export function Dashboard() {
         <Card className="border-green-100">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              {isRecycler
-                ? "Botellas Vendidas"
-                : "Botellas Compradas"}
+              {isRecycler ? "Botellas Vendidas" : "Botellas Compradas"}
             </CardTitle>
             <Package className="size-4 text-primary" />
           </CardHeader>
@@ -238,14 +330,10 @@ export function Dashboard() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Progress
-            value={isRecycler ? 62.5 : 84.5}
-            className="h-3"
-          />
+          <Progress value={isRecycler ? 62.5 : 84.5} className="h-3" />
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">
-              {isRecycler ? "1,250" : "8,450"} botellas
-              completadas
+              {isRecycler ? "1,250" : "8,450"} botellas completadas
             </span>
             <span className="text-primary font-medium">
               {isRecycler ? "62.5%" : "84.5%"}
@@ -267,7 +355,7 @@ export function Dashboard() {
               </div>
               <Link to="/publish">
                 <Button className="bg-primary hover:bg-green-600">
-                  Nueva Publicación
+                  + Nueva Publicación
                 </Button>
               </Link>
             </div>
@@ -289,15 +377,15 @@ export function Dashboard() {
                           pub.status === "active"
                             ? "bg-green-100 text-green-700"
                             : pub.status === "sold"
-                            ? "bg-gray-100 text-gray-700"
-                            : "bg-yellow-100 text-yellow-700"
+                              ? "bg-gray-100 text-gray-700"
+                              : "bg-yellow-100 text-yellow-700"
                         }`}
                       >
                         {pub.status === "active"
                           ? "Activa"
                           : pub.status === "sold"
-                          ? "Vendida"
-                          : "Pendiente"}
+                            ? "Vendida"
+                            : "Pendiente"}
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
@@ -325,13 +413,33 @@ export function Dashboard() {
                       </span>
                     </div>
                   </div>
-                  <div className="mt-3 md:mt-0 md:ml-4 text-right">
+                  <div className="mt-3 md:mt-0 md:ml-4 text-right space-y-2">
                     <div className="text-2xl font-bold text-green-600">
                       ${pub.price.toFixed(2)}
                     </div>
+
                     <p className="text-xs text-muted-foreground">
                       ${(pub.price / pub.quantity).toFixed(2)}/unidad
                     </p>
+
+                    {/* 🔥 BOTONES */}
+                    <div className="flex gap-2 justify-end">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => navigate(`/edit/${pub.id}`)}
+                      >
+                        Editar
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleDelete(pub.id)}
+                      >
+                        Eliminar
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -404,7 +512,9 @@ export function Dashboard() {
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <div>
-                    <p className="text-sm text-muted-foreground">PET Transparente</p>
+                    <p className="text-sm text-muted-foreground">
+                      PET Transparente
+                    </p>
                     <p className="text-2xl font-bold text-foreground">3,200</p>
                   </div>
                   <div className="text-right">
@@ -476,16 +586,12 @@ export function Dashboard() {
                   </div>
                   <div>
                     <div className="font-medium text-foreground">
-                      {transaction.type === "sale"
-                        ? "Venta"
-                        : "Compra"}{" "}
-                      - {transaction.bottles} botellas
+                      {transaction.type === "sale" ? "Venta" : "Compra"} -{" "}
+                      {transaction.bottles} botellas
                     </div>
                     <div className="text-sm text-muted-foreground">
                       {transaction.partner} •{" "}
-                      {new Date(
-                        transaction.date,
-                      ).toLocaleDateString("es-ES")}
+                      {new Date(transaction.date).toLocaleDateString("es-ES")}
                     </div>
                   </div>
                 </div>
@@ -510,7 +616,9 @@ export function Dashboard() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Recycle className="size-5 text-primary" />
-            {isRecycler ? "Tu Impacto Ambiental" : "Impacto Ambiental Colectivo"}
+            {isRecycler
+              ? "Tu Impacto Ambiental"
+              : "Impacto Ambiental Colectivo"}
           </CardTitle>
           <CardDescription>
             {isRecycler

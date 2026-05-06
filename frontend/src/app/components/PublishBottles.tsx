@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import {
   Package,
   DollarSign,
@@ -29,7 +29,6 @@ import {
 import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
 import { toast } from "sonner";
 import { supabase } from "./supabaseClient";
-
 function MapController({
   center,
   zoom,
@@ -65,7 +64,10 @@ function MapClickHandler({ onClick }: { onClick: () => void }) {
 }
 
 export function PublishBottles() {
+  const { id } = useParams();
+  const isEditMode = !!id;
   const navigate = useNavigate();
+
   const userType = localStorage.getItem("userType") || "recycler";
   const moneda = localStorage.getItem("userMoneda") || "COP";
   const isRecycler = userType === "recycler";
@@ -105,6 +107,37 @@ export function PublishBottles() {
 
     fetchTipos();
   }, []);
+  useEffect(() => {
+    if (!isEditMode) return;
+
+    const fetchPublication = async () => {
+      const { data, error } = await supabase
+        .from("publicaciones")
+        .select("*")
+        .eq("id_publicacion", id)
+        .single();
+
+      if (error) {
+        console.error("Error cargando publicación:", error);
+        return;
+      }
+
+      if (data) {
+        setFormData({
+          titulo: data.titulo || "",
+          quantity: data.cantidad_unidades?.toString() || "",
+          bottleType: data.id_tipo_botella?.toString() || "",
+          pricePerUnit: data.precio_unitario?.toString() || "",
+          description: data.descripcion || "",
+        });
+      }
+    };
+
+    fetchPublication();
+  }, [id, isEditMode]);
+  if (isEditMode && !formData.quantity) {
+    return <div>Cargando publicación...</div>;
+  }
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -257,29 +290,36 @@ export function PublishBottles() {
       return;
     }
 
-    const { error } = await supabase.from("publicaciones").insert({
-      id_usuario: usuario.id_usuario,
-      id_ubicacion: idUbicacion,
-      id_tipo_botella: parseInt(formData.bottleType),
-      cantidad_unidades: parseInt(formData.quantity),
-      precio_unitario: parseFloat(formData.pricePerUnit),
-      descripcion: formData.description,
-      titulo:
-        formData.titulo ||
-        `${formData.bottleType} - ${formData.quantity} unidades`,
-      estado: "activa",
-      fecha_publicacion: new Date().toISOString().split("T")[0],
-    });
+    if (isEditMode) {
+      const { error } = await supabase
+        .from("publicaciones")
+        .update({
+          titulo: formData.titulo,
+          cantidad_unidades: parseInt(formData.quantity),
+          precio_unitario: parseFloat(formData.pricePerUnit),
+          descripcion: formData.description,
+          id_tipo_botella: parseInt(formData.bottleType),
+          id_ubicacion: idUbicacion,
+        })
+        .eq("id_publicacion", id);
 
-    if (error) {
-      toast.error("Error al publicar: " + error.message);
+      if (error) {
+        toast.error("Error al actualizar: " + error.message);
+        setLoading(false);
+        return;
+      }
+
+      // 🔥 ESTO ES LO QUE TE FALTA
+      toast.success("Publicación actualizada");
+
       setLoading(false);
-      return;
-    }
 
-    setShowSuccess(true);
-    setLoading(false);
-    setTimeout(() => navigate("/bottles"), 2000);
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 1000);
+
+      return; // 🔥 IMPORTANTE
+    }
   };
 
   if (showSuccess) {
@@ -311,8 +351,10 @@ export function PublishBottles() {
       <div>
         <h1 className="text-3xl font-bold text-foreground">
           {isRecycler
-            ? "Publicar Botellas para Venta"
-            : "Publicar Solicitud de Compra"}
+            ? "Editar Publicación"
+            : isRecycler
+              ? "Publicar Botellas para Venta"
+              : "Publicar Solicitud de Compra"}
         </h1>
         <p className="text-muted-foreground mt-2">
           {isRecycler
@@ -459,14 +501,14 @@ export function PublishBottles() {
                 >
                   Cancelar
                 </Button>
-                <Button
-                  type="submit"
-                  className="flex-1 bg-primary hover:bg-green-600"
-                  disabled={loading}
-                >
+                <Button type="submit" disabled={loading}>
                   {loading
-                    ? "Publicando..."
-                    : `Publicar ${isRecycler ? "Oferta" : "Solicitud"}`}
+                    ? isEditMode
+                      ? "Actualizando..."
+                      : "Publicando..."
+                    : isEditMode
+                      ? "Guardar Cambios"
+                      : `Publicar ${isRecycler ? "Oferta" : "Solicitud"}`}
                 </Button>
               </div>
             </form>
@@ -577,7 +619,6 @@ export function PublishBottles() {
             </CardContent>
           </Card>
         </div>
-        
       </div>
     </div>
   );

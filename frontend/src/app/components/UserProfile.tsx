@@ -10,6 +10,7 @@ import {
   Shield,
   Award,
 } from "lucide-react";
+import { Lock } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -27,6 +28,12 @@ import { toast } from "sonner";
 import { supabase } from "./supabaseClient";
 
 export function UserProfile() {
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [loadingPassword, setLoadingPassword] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [profileData, setProfileData] = useState({
@@ -38,7 +45,7 @@ export function UserProfile() {
     joinDate: "",
     tipo: "",
   });
-  
+
   const [stats, setStats] = useState({
     totalTransactions: 0,
     totalBottles: 0,
@@ -49,16 +56,42 @@ export function UserProfile() {
   useEffect(() => {
     cargarPerfil();
   }, []);
+  const handleChangePassword = async (e: React.FormEvent) => {
+      e.preventDefault();
+
+      if (passwordData.newPassword !== passwordData.confirmPassword) {
+        toast.error("Las contraseñas no coinciden");
+        return;
+      }
+
+      if (passwordData.newPassword.length < 8) {
+        toast.error("La contraseña debe tener al menos 8 caracteres");
+        return;
+      }
+
+      setLoadingPassword(true);
+
+      const { error } = await supabase.auth.updateUser({
+        password: passwordData.newPassword,
+      });
+
+      if (error) {
+        toast.error("Error al cambiar contraseña: " + error.message);
+      } else {
+        toast.success("Contraseña actualizada correctamente");
+        setShowChangePassword(false);
+        setPasswordData({ newPassword: "", confirmPassword: "" });
+      }
+      setLoadingPassword(false);
+    };
 
   const cargarPerfil = async () => {
     setLoading(true);
 
-    // Obtener usuario autenticado
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const userEmail = localStorage.getItem("userEmail");
+    const userId = localStorage.getItem("userId");
 
-    if (!user) {
+    if (!userEmail) {
       toast.error("No hay sesión activa");
       setLoading(false);
       return;
@@ -68,10 +101,10 @@ export function UserProfile() {
     const { data, error } = await supabase
       .from("usuarios")
       .select("*")
-      .eq("correo", user.email)
+      .eq("correo", userEmail)
       .single();
 
-    if (error) {
+    if (error || !data) {
       toast.error("Error al cargar perfil");
       setLoading(false);
       return;
@@ -90,17 +123,24 @@ export function UserProfile() {
     // Obtener estadísticas de transacciones
     const { data: transacciones } = await supabase
       .from("transacciones")
-      .select("cantidad")
-      .or(`id_comprador.eq.${data.id_usuario},id_vendedor.eq.${data.id_usuario}`);
+      .select("cantidad_unidades")
+      .or(
+        `id_comprador.eq.${data.id_usuario},id_vendedor.eq.${data.id_usuario}`,
+      );
 
     const totalBotellas =
-      transacciones?.reduce((sum, t) => sum + t.cantidad, 0) || 0;
+      transacciones?.reduce((sum, t) => sum + t.cantidad_unidades, 0) || 0;
+
+    // Verificar si el correo está confirmado en Auth
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     setStats({
       totalTransactions: transacciones?.length || 0,
       totalBottles: totalBotellas,
       rating: 4.8,
-      verified: user.email_confirmed_at != null,
+      verified: user?.email_confirmed_at != null,
     });
 
     setLoading(false);
@@ -118,7 +158,7 @@ export function UserProfile() {
         nombre: profileData.name,
         correo: profileData.email,
       })
-      .eq('correo', user.email);
+      .eq("correo", user.email);
 
     if (error) {
       toast.error("Error al guardar cambios");
@@ -270,6 +310,92 @@ export function UserProfile() {
             <h3 className="font-semibold text-foreground">
               Información de Cuenta
             </h3>
+            <Separator />
+
+            <div className="space-y-4">
+              <h3 className="font-semibold text-foreground">Seguridad</h3>
+
+              {!showChangePassword ? (
+                <Button
+                  variant="outline"
+                  onClick={() => setShowChangePassword(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Lock className="size-4" />
+                  Cambiar Contraseña
+                </Button>
+              ) : (
+                <form
+                  onSubmit={handleChangePassword} // ✅ BIEN
+                  className="space-y-4 max-w-md"
+                >
+                  <div className="space-y-2">
+                    <Label htmlFor="new-password">Nueva Contraseña</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 size-4 text-muted-foreground" />
+                      <Input
+                        id="new-password"
+                        type="password"
+                        placeholder="Mínimo 8 caracteres"
+                        className="pl-10"
+                        value={passwordData.newPassword}
+                        onChange={(e) =>
+                          setPasswordData((prev) => ({
+                            ...prev,
+                            newPassword: e.target.value,
+                          }))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-password">
+                      Confirmar Contraseña
+                    </Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 size-4 text-muted-foreground" />
+                      <Input
+                        id="confirm-password"
+                        type="password"
+                        placeholder="Repite la contraseña"
+                        className="pl-10"
+                        value={passwordData.confirmPassword}
+                        onChange={(e) =>
+                          setPasswordData((prev) => ({
+                            ...prev,
+                            confirmPassword: e.target.value,
+                          }))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <Button
+                      type="submit"
+                      className="bg-primary hover:bg-green-600"
+                      disabled={loadingPassword}
+                    >
+                      {loadingPassword ? "Guardando..." : "Guardar Contraseña"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setShowChangePassword(false);
+                        setPasswordData({
+                          newPassword: "",
+                          confirmPassword: "",
+                        });
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                 <Calendar className="size-5 text-primary" />

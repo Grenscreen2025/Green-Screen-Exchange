@@ -53,6 +53,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="/edit/:id" element={<PublishBottles />} />
           <Route
             path="/profile"
             element={
