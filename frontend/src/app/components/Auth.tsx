@@ -210,71 +210,82 @@ export function Auth() {
   };
 
   /* ── Pantalla de confirmación ── */
-  if (showConfirmation) {
-    return (
-      <>
-        {/* MODAL recuperar contraseña */}
-        {showForgotPassword && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <Card className="w-full max-w-md border-green-100 shadow-xl">
-              <CardHeader>
-                <CardTitle className="text-xl">Recuperar Contraseña</CardTitle>
-                <CardDescription>
-                  Te enviaremos un enlace para restablecer tu contraseña
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {resetSent ? (
-                  <div className="text-center space-y-4">
-                    <Mail className="size-12 text-primary mx-auto" />
-                    <p className="text-sm text-muted-foreground">
-                      Revisa tu correo y haz clic en el enlace
-                    </p>
-                    <Button
-                      className="w-full bg-primary hover:bg-green-600"
-                      onClick={() => {
-                        setShowForgotPassword(false);
-                        setResetSent(false);
-                      }}
-                    >
-                      Volver al login
-                    </Button>
-                  </div>
-                ) : (
-                  <form onSubmit={handleForgotPassword} className="space-y-4">
-                    <Input
-                      type="email"
-                      value={resetEmail}
-                      onChange={(e) => setResetEmail(e.target.value)}
-                      required
-                    />
-                    <Button type="submit" className="w-full">
-                      Enviar enlace
-                    </Button>
-                  </form>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* PANTALLA DE CONFIRMACIÓN */}
-        <div className="min-h-screen flex items-center justify-center">
-          <Card className="text-center">
-            <CardHeader>
-              <CardTitle>¡Revisa tu correo!</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Button onClick={() => setShowConfirmation(false)}>Volver</Button>
-            </CardContent>
-          </Card>
-        </div>
-      </>
-    );
-  }
-  /* ── Layout principal ── */
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-green-50 flex items-center justify-center p-4">
+  <>
+    {/* 🟣 MODAL OLVIDÉ CONTRASEÑA */}
+    {showForgotPassword && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <Card className="w-full max-w-md border-green-100 shadow-xl">
+          <CardHeader>
+            <CardTitle className="text-xl">Recuperar Contraseña</CardTitle>
+            <CardDescription>
+              Te enviaremos un enlace para restablecer tu contraseña
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent>
+            {resetSent ? (
+              <div className="text-center space-y-4">
+                <Mail className="size-12 text-primary mx-auto" />
+                <p className="text-sm text-muted-foreground">
+                  Revisa tu correo y haz clic en el enlace
+                </p>
+                <Button
+                  className="w-full"
+                  onClick={() => {
+                    setShowForgotPassword(false);
+                    setResetSent(false);
+                  }}
+                >
+                  Volver al login
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <Input
+                  type="email"
+                  placeholder="tu@email.com"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  required
+                />
+                <Button type="submit" className="w-full">
+                  {loading ? "Enviando..." : "Enviar enlace"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => setShowForgotPassword(false)}
+                >
+                  Cancelar
+                </Button>
+              </form>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    )}
+
+    {/* 🔵 CONTENIDO */}
+    {showConfirmation ? (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="text-center">
+          <CardHeader>
+            <CardTitle>¡Revisa tu correo!</CardTitle>
+            <CardDescription>
+              Te enviamos un enlace de verificación
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => setShowConfirmation(false)}>
+              Volver al login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    ) : (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-green-50 flex items-center justify-center p-4">
       <div
         className={`w-full transition-all duration-500 ${activeTab === "register" ? "max-w-5xl" : "max-w-md"}`}
       >
@@ -602,5 +613,7 @@ export function Auth() {
         </Card>
       </div>
     </div>
-  );
+    )}
+  </>
+);
 }
