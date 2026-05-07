@@ -8,7 +8,7 @@ import {
   DollarSign,
   User,
   Building2,
-  MessageCircle,
+ 
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -150,29 +150,6 @@ export function BottlesList() {
       : `https://wa.me/?text=${message}`;
     window.open(url, "_blank");
   };
-
-  const comprarBotellas = async (listing: BottleListing) => {
-    console.log("SELLER ID:", listing.sellerId);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      alert("Debes iniciar sesión");
-      return;
-    }
-
-    // 🔍 obtener comprador
-    const { data: comprador } = await supabase
-      .from("usuarios")
-      .select("id_usuario")
-      .eq("correo", user.email)
-      .single();
-
-    if (!comprador) {
-      alert("Error obteniendo usuario");
-      return;
-    }
 
     
     const eliminarPublicacion = async (id: number) => {
@@ -409,14 +386,7 @@ export function BottlesList() {
                   </span>
 
                   <div className="flex gap-2">
-                    {/* BOTÓN COMPRAR */}
-                    <Button
-                      size="sm"
-                      className="bg-blue-500 hover:bg-blue-600"
-                      onClick={() => comprarBotellas(listing)}
-                    >
-                      Comprar
-                    </Button>
+                   
                 
                     {/* BOTÓN ADMIN */}
                     {isAdmin && (
