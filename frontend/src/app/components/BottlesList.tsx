@@ -41,6 +41,7 @@ interface BottleListing {
   location: string;
   description: string;
   postedDate: string;
+  sellerId: number;
 }
 
 export function BottlesList() {
@@ -56,6 +57,26 @@ export function BottlesList() {
   useEffect(() => {
     cargarDatos();
   }, []);
+
+
+  useEffect(() => {
+    const obtenerRol = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const { data } = await supabase
+        .from("usuarios")
+        .select("rol")
+        .eq("correo", user?.email)
+        .single();
+
+      if (data?.rol === "admin") {
+        setIsAdmin(true);
+      }
+    };
+
+    obtenerRol();
+  }, []);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const cargarDatos = async () => {
     setLoading(true);
@@ -84,7 +105,7 @@ export function BottlesList() {
         descripcion,
         fecha_publicacion,
         estado,
-        usuarios!id_usuario (nombre, tipo_usuario, telefono, moneda),
+        usuarios!id_usuario (id_usuario, nombre, tipo_usuario, telefono, moneda),
         tipos_botella!id_tipo_botella (nombre),
         ubicaciones!id_ubicacion (ciudad, pais)
       `,
@@ -100,6 +121,7 @@ export function BottlesList() {
 
     const mapped: BottleListing[] = (data || []).map((p: any) => ({
       id: p.id_publicacion,
+      sellerId: p.usuarios?.id_usuario,
       seller: p.usuarios?.nombre || "Vendedor",
       sellerType: p.usuarios?.tipo_usuario === "center" ? "center" : "recycler",
       telefono: p.usuarios?.telefono || "",
@@ -127,6 +149,70 @@ export function BottlesList() {
       ? `https://wa.me/${phone}?text=${message}`
       : `https://wa.me/?text=${message}`;
     window.open(url, "_blank");
+  };
+
+  const comprarBotellas = async (listing: BottleListing) => {
+    console.log("SELLER ID:", listing.sellerId);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      alert("Debes iniciar sesión");
+      return;
+    }
+
+    // 🔍 obtener comprador
+    const { data: comprador } = await supabase
+      .from("usuarios")
+      .select("id_usuario")
+      .eq("correo", user.email)
+      .single();
+
+    if (!comprador) {
+      alert("Error obteniendo usuario");
+      return;
+    }
+
+    // 🔥 INSERTAR TRANSACCIÓN
+    const { error } = await supabase.from("transacciones").insert({
+      id_publicacion: listing.id,
+      id_vendedor: listing.sellerId,
+      id_comprador: comprador.id_usuario,
+      cantidad_unidades: listing.quantity,
+      precio_total_usd: listing.quantity * listing.pricePerUnit,
+      fecha_transaccion: new Date().toISOString(),
+    });
+
+    if (error) {
+      console.error(error);
+      alert("Error al comprar: " + error.message);
+      console.error(error);
+      return;
+    }
+
+    // 🔴 OPCIONAL: desactivar publicación
+    await supabase
+      .from("publicaciones")
+      .update({ estado: "vendida" })
+      .eq("id_publicacion", listing.id);
+
+    alert("Compra realizada con éxito");
+    cargarDatos(); // refrescar lista
+  };
+
+  const eliminarPublicacion = async (id: number) => {
+    const { error } = await supabase
+      .from("publicaciones")
+      .delete()
+      .eq("id_publicacion", id);
+
+    if (error) {
+      alert("Error al eliminar");
+    } else {
+      alert("Publicación eliminada");
+      cargarDatos(); // 🔥 refresca la lista
+    }
   };
 
   const filteredListings = listings.filter((listing) => {
@@ -228,18 +314,18 @@ export function BottlesList() {
         {(searchQuery ||
           selectedType !== "all" ||
           selectedLocation !== "all") && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setSearchQuery("");
-              setSelectedType("all");
-              setSelectedLocation("all");
-            }}
-          >
-            Limpiar filtros
-          </Button>
-        )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearchQuery("");
+                setSelectedType("all");
+                setSelectedLocation("all");
+              }}
+            >
+              Limpiar filtros
+            </Button>
+          )}
       </div>
 
       {loading ? (
@@ -347,21 +433,45 @@ export function BottlesList() {
                     Publicado:{" "}
                     {new Date(listing.postedDate).toLocaleDateString("es-ES")}
                   </span>
-                  <Button
-                    size="sm"
-                    className="bg-green-500 hover:bg-green-600"
-                    onClick={() => handleContactar(listing)}
-                  >
-                    <MessageCircle className="size-4 mr-2" />
-                    Contactar WhatsApp
-                  </Button>
+
+                  <div className="flex gap-2">
+                    {/* BOTÓN COMPRAR */}
+                    <Button
+                      size="sm"
+                      className="bg-blue-500 hover:bg-blue-600"
+                      onClick={() => comprarBotellas(listing)}
+                    >
+                      Comprar
+                    </Button>
+
+                    {/* BOTÓN WHATSAPP */}
+                    <Button
+                      size="sm"
+                      className="bg-green-500 hover:bg-green-600"
+                      onClick={() => handleContactar(listing)}
+                    >
+                      <MessageCircle className="size-4 mr-2" />
+                      WhatsApp
+                    </Button>
+
+                    {/* BOTÓN ADMIN */}
+                    {isAdmin && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => eliminarPublicacion(listing.id)}
+                      >
+                        Eliminar
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
-      
+
 
       {!loading && filteredListings.length === 0 && (
         <Card className="border-dashed">

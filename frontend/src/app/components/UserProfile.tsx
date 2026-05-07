@@ -37,6 +37,7 @@ export function UserProfile() {
     bio: "",
     joinDate: "",
     tipo: "",
+    roll: "",
   });
   
   const [stats, setStats] = useState({
@@ -85,6 +86,7 @@ export function UserProfile() {
       bio: "",
       joinDate: data.fecha_registro || "",
       tipo: data.tipo_usuario || "",
+      rol: data.rol || "user",
     });
 
     // Obtener estadísticas de transacciones
@@ -142,6 +144,7 @@ export function UserProfile() {
   }
 
   const isRecycler = profileData.tipo === "recycler";
+  const isAdmin = profileData.rol === "admin";
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
