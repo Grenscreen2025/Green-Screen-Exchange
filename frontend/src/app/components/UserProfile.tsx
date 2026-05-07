@@ -119,7 +119,7 @@ export function UserProfile() {
       bio: "",
       joinDate: data.fecha_registro || "",
       tipo: data.tipo_usuario || "",
-      rol: data.rol || "user",
+      roll: data.rol || "user",
     });
 
     // Obtener estadísticas de transacciones
@@ -184,7 +184,7 @@ export function UserProfile() {
   }
 
   const isRecycler = profileData.tipo === "recycler";
-  const isAdmin = profileData.rol === "admin";
+  const isAdmin = profileData.roll === "admin";
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
