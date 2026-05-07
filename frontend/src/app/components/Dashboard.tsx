@@ -13,6 +13,7 @@ import {
   Calendar,
   Users,
   Star,
+  Bell,
 } from "lucide-react";
 import {
   Card,
@@ -25,7 +26,6 @@ import { Progress } from "./ui/progress";
 import { Button } from "./ui/button";
 import { supabase } from "./supabaseClient";
 import { useNavigate } from "react-router";
-
 
 interface Transaction {
   id: number;
@@ -69,6 +69,11 @@ export function Dashboard() {
   );
   const [topSuppliers, setTopSuppliers] = useState<any[]>([]);
   const userId = localStorage.getItem("userId");
+
+  const [notificaciones, setNotificaciones] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  const unreadCount = notificaciones.filter((n) => !n.leida).length;
 
   const handleDelete = async (id: number) => {
     const confirmDelete = confirm("¿Seguro que quieres eliminar?");
@@ -150,6 +155,16 @@ export function Dashboard() {
           );
         }
       }
+      // 🔔 NOTIFICACIONES
+      const { data: notis } = await supabase
+        .from("notificaciones")
+        .select("*")
+        .eq("id_usuario", idUsuario)
+        .order("fecha", { ascending: false });
+
+      if (notis) {
+        setNotificaciones(notis);
+      }
 
       // 🔹 PUBLICACIONES DEL USUARIO
       const { data: pubs, error: pubError } = await supabase
@@ -228,19 +243,108 @@ export function Dashboard() {
   return (
     <div className="space-y-8">
       {/* Welcome Section */}
-      <div>
-        <div className="flex items-center gap-3 mb-2">
-          <Logo className="h-8 w-8 text-green-600" />
-          <h1 className="text-3xl font-bold text-foreground">
-            {isRecycler ? "Panel de Reciclador" : "Panel de Centro de Acopio"}
-          </h1>
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <Logo className="h-8 w-8 text-green-600" />
+
+            <h1 className="text-3xl font-bold text-foreground">
+              {isRecycler ? "Panel de Reciclador" : "Panel de Centro de Acopio"}
+            </h1>
+          </div>
+
+          <p className="text-muted-foreground mt-2">
+            {isRecycler
+              ? "Gestiona tus publicaciones y monitorea tus ventas"
+              : "Administra tus compras y proveedores"}
+          </p>
         </div>
-        <p className="text-muted-foreground mt-2">
-          {isRecycler
-            ? "Gestiona tus publicaciones y monitorea tus ventas"
-            : "Administra tus compras y proveedores"}
-        </p>
+
+        {/* 🔔 BOTÓN NOTIFICACIONES */}
+        <div className="relative">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setShowNotifications(!showNotifications)}
+          >
+            <Bell className="size-5" />
+          </Button>
+
+          {unreadCount > 0 && (
+            <div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full size-5 flex items-center justify-center">
+              {unreadCount}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* PANEL NOTIFICACIONES */}
+      {showNotifications && (
+        <Card className="border-green-100">
+          <CardHeader>
+            <CardTitle>Notificaciones</CardTitle>
+            <CardDescription>
+              Actividad reciente de compras y ventas
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent>
+            <div className="space-y-3">
+              {notificaciones.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No tienes notificaciones
+                </p>
+              ) : (
+                notificaciones.map((noti) => (
+                  <div
+                    key={noti.id_notificacion}
+                    className={`p-4 rounded-lg border ${
+                      noti.leida ? "bg-white" : "bg-green-50 border-green-300"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-semibold">{noti.titulo}</h4>
+
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {noti.mensaje}
+                        </p>
+
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {new Date(noti.fecha).toLocaleString("es-ES")}
+                        </p>
+                      </div>
+
+                      {!noti.leida && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={async () => {
+                            await supabase
+                              .from("notificaciones")
+                              .update({ leida: true })
+                              .eq("id_notificacion", noti.id_notificacion);
+
+                            setNotificaciones((prev) =>
+                              prev.map((n) =>
+                                n.id_notificacion === noti.id_notificacion
+                                  ? { ...n, leida: true }
+                                  : n,
+                              ),
+                            );
+                          }}
+                        >
+                          Marcar leída
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats Cards */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
