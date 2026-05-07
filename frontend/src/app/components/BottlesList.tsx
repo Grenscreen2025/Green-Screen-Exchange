@@ -174,34 +174,8 @@ export function BottlesList() {
       return;
     }
 
-    // 🔥 INSERTAR TRANSACCIÓN
-    const { error } = await supabase.from("transacciones").insert({
-      id_publicacion: listing.id,
-      id_vendedor: listing.sellerId,
-      id_comprador: comprador.id_usuario,
-      cantidad_unidades: listing.quantity,
-      precio_total_usd: listing.quantity * listing.pricePerUnit,
-      fecha_transaccion: new Date().toISOString(),
-    });
-
-    if (error) {
-      console.error(error);
-      alert("Error al comprar: " + error.message);
-      console.error(error);
-      return;
-    }
-
-    // 🔴 OPCIONAL: desactivar publicación
-    await supabase
-      .from("publicaciones")
-      .update({ estado: "vendida" })
-      .eq("id_publicacion", listing.id);
-
-    alert("Compra realizada con éxito");
-    cargarDatos(); // refrescar lista
-  };
-
-  const eliminarPublicacion = async (id: number) => {
+    
+    const eliminarPublicacion = async (id: number) => {
     const { error } = await supabase
       .from("publicaciones")
       .delete()
@@ -443,17 +417,7 @@ export function BottlesList() {
                     >
                       Comprar
                     </Button>
-
-                    {/* BOTÓN WHATSAPP */}
-                    <Button
-                      size="sm"
-                      className="bg-green-500 hover:bg-green-600"
-                      onClick={() => handleContactar(listing)}
-                    >
-                      <MessageCircle className="size-4 mr-2" />
-                      WhatsApp
-                    </Button>
-
+                
                     {/* BOTÓN ADMIN */}
                     {isAdmin && (
                       <Button
@@ -483,16 +447,7 @@ export function BottlesList() {
             <p className="text-muted-foreground mb-4">
               Intenta ajustar tus filtros de búsqueda
             </p>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSearchQuery("");
-                setSelectedType("all");
-                setSelectedLocation("all");
-              }}
-            >
-              Limpiar filtros
-            </Button>
+            
           </CardContent>
         </Card>
       )}
