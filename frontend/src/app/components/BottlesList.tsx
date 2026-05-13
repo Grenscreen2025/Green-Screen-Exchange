@@ -73,15 +73,14 @@ export function BottlesList() {
     setShowBuyModal(true);
   };
 
+  // Dentro de confirmarCompra (BottlesList.tsx)
   const confirmarCompra = async (total: boolean) => {
     if (!selectedListing) return;
     setLoadingCompra(true);
 
-    const userId = localStorage.getItem("userId");
     const cantidad = total
       ? selectedListing.quantity
       : parseInt(cantidadCompra);
-
     if (!cantidad || cantidad <= 0 || cantidad > selectedListing.quantity) {
       toast.error("Cantidad inválida");
       setLoadingCompra(false);
@@ -93,9 +92,9 @@ export function BottlesList() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-
     if (!user) {
       toast.error("Usuario no autenticado");
+      setLoadingCompra(false);
       return;
     }
 
@@ -104,13 +103,13 @@ export function BottlesList() {
       .select("id_usuario")
       .eq("correo", user.email)
       .single();
-
     if (compradorError || !comprador) {
       toast.error("No se pudo obtener el comprador");
+      setLoadingCompra(false);
       return;
     }
 
-    // Registrar transacción
+    // ✅ Solo crear transacción pendiente (NO tocar la publicación)
     const { data: transCreada, error } = await supabase
       .from("transacciones")
       .insert({
@@ -131,39 +130,7 @@ export function BottlesList() {
       return;
     }
 
-    // 🔥 Calcular cantidad restante
-    const nuevaCantidad = selectedListing.quantity - cantidad;
-
-    // 🔥 COMPRA TOTAL
-    if (nuevaCantidad <= 0) {
-      const { error: updateError } = await supabase
-        .from("publicaciones")
-        .update({
-          cantidad_unidades: 0,
-          estado: "reservada", // 👈 NO cerrada
-        })
-        .eq("id_publicacion", selectedListing.id);
-
-      if (updateError) {
-        console.error(updateError);
-      }
-    } else {
-      // 🔥 COMPRA PARCIAL
-      const { error: updateError } = await supabase
-        .from("publicaciones")
-        .update({
-          cantidad_unidades: nuevaCantidad,
-          estado: "activa",
-        })
-        .eq("id_publicacion", selectedListing.id);
-
-      if (updateError) {
-        console.error(updateError);
-      }
-    }
-    console.log(selectedListing.id_vendedor);
-
-    // Enviar notificación al vendedor
+    // Notificar al vendedor
     const { error: notiError } = await supabase.from("notificaciones").insert({
       id_usuario: selectedListing.id_vendedor,
       titulo: "¡Nueva solicitud de compra!",
@@ -173,15 +140,14 @@ export function BottlesList() {
       id_referencia: selectedListing.id,
       id_transaccion: transCreada.id_transaccion,
     });
-    console.log(selectedListing.id_vendedor);
 
-    if (notiError) {
-      console.error("Error creando notificación:", notiError);
-    }
+    if (notiError) console.error("Error creando notificación:", notiError);
+    else
+      toast.success("¡Solicitud enviada! Espera la confirmación del vendedor.");
 
-    toast.success("¡Transacción registrada! El vendedor ha sido notificado.");
     setShowBuyModal(false);
     setLoadingCompra(false);
+    // Recargar la lista para reflejar que la publicación sigue igual (no cambió)
     await cargarDatos();
   };
 
@@ -192,13 +158,15 @@ export function BottlesList() {
     const { data: tipos } = await supabase
       .from("tipos_botella")
       .select("id_tipo_botella, nombre");
-    setTiposBotella(tipos || []);
-
-    // Cargar ubicaciones para filtros
+    setTiposBotella(
+      (tipos || []).filter((t) => t.nombre && t.nombre.trim() !== ""),
+    );
     const { data: ubics } = await supabase
       .from("ubicaciones")
       .select("id_ubicacion, ciudad, pais");
-    setUbicaciones(ubics || []);
+    setUbicaciones(
+      (ubics || []).filter((u) => u.ciudad && u.ciudad.trim() !== ""),
+    );
 
     // Cargar publicaciones con joins
     const { data, error } = await supabase
@@ -317,14 +285,16 @@ export function BottlesList() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos los tipos</SelectItem>
-                  {tiposBotella.map((t) => (
-                    <SelectItem
-                      key={t.id_tipo_botella}
-                      value={t.nombre.toLowerCase()}
-                    >
-                      {t.nombre}
-                    </SelectItem>
-                  ))}
+                  {tiposBotella
+                    .filter((t) => t.nombre && t.nombre.trim() !== "") // solo nombres no vacíos
+                    .map((t) => (
+                      <SelectItem
+                        key={t.id_tipo_botella}
+                        value={t.nombre.toLowerCase()}
+                      >
+                        {t.nombre}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -340,11 +310,13 @@ export function BottlesList() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas las ubicaciones</SelectItem>
-                  {ubicaciones.map((u) => (
-                    <SelectItem key={u.id_ubicacion} value={u.ciudad}>
-                      {u.ciudad}, {u.pais}
-                    </SelectItem>
-                  ))}
+                  {ubicaciones
+                    .filter((u) => u.ciudad && u.ciudad.trim() !== "") // solo ciudades no vacías
+                    .map((u) => (
+                      <SelectItem key={u.id_ubicacion} value={u.ciudad}>
+                        {u.ciudad}, {u.pais}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>

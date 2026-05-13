@@ -135,85 +135,110 @@ export function Dashboard() {
       .update({ leida: true })
       .eq("id_notificacion", noti.id_notificacion);
 
-    if (!noti.id_referencia) return;
+    if (!noti.id_transaccion) {
+      toast.error("La notificación no tiene una transacción asociada.");
+      return;
+    }
 
-    // 2. Buscar transacción pendiente
+    // 2. Buscar la transacción específica por ID (no por publicación)
     const { data: trans, error: transError } = await supabase
       .from("transacciones")
       .select(
-        "id_comprador, id_transaccion, cantidad_unidades, precio_total_usd",
+        "id_comprador, id_transaccion, cantidad_unidades, precio_total_usd, estado",
       )
-      .eq("id_publicacion", noti.id_referencia)
-      .eq("estado", "pendiente")
+      .eq("id_transaccion", noti.id_transaccion)
       .maybeSingle();
 
     if (!trans) {
-      console.error(
-        "❌ No se encontró transacción pendiente para la publicación",
-        noti.id_referencia,
+      console.error("❌ No se encontró la transacción", noti.id_transaccion);
+      toast.error("Esta solicitud ya no existe.");
+      return;
+    }
+
+    if (trans.estado !== "pendiente") {
+      toast.error(
+        `Esta solicitud ya fue ${trans.estado === "reservada" ? "confirmada" : "cancelada"}.`,
       );
-      toast.error("Error: No se pudo encontrar la solicitud de compra.");
       return;
     }
 
     if (!trans.id_comprador) {
       console.error("❌ La transacción no tiene id_comprador", trans);
-      toast.error("Error interno: falta el comprador en la transacción.");
+      toast.error("Error interno: falta el comprador.");
       return;
     }
 
-    // 3. Actualizar publicación a reservada
-    await supabase
+    // 3. Obtener la publicación actual
+    const { data: pub, error: pubError } = await supabase
       .from("publicaciones")
-      .update({ estado: "reservada", visible_marketplace: false })
-      .eq("id_publicacion", noti.id_referencia);
+      .select("id_usuario, cantidad_unidades, titulo")
+      .eq("id_publicacion", noti.id_referencia) // noti.id_referencia es id_publicacion
+      .single();
 
-    // 4. Actualizar transacción a reservada
+    if (pubError || !pub) {
+      toast.error("No se encontró la publicación.");
+      return;
+    }
+
+    // 4. Calcular nueva cantidad
+    const nuevaCantidad = pub.cantidad_unidades - trans.cantidad_unidades;
+
+    // 5. Actualizar la publicación (restar stock)
+    if (nuevaCantidad <= 0) {
+      await supabase
+        .from("publicaciones")
+        .update({
+          estado: "cerrada",
+          visible_marketplace: false,
+          cantidad_unidades: 0,
+        })
+        .eq("id_publicacion", noti.id_referencia);
+    } else {
+      await supabase
+        .from("publicaciones")
+        .update({
+          cantidad_unidades: nuevaCantidad,
+          estado: "activa",
+          visible_marketplace: true,
+        })
+        .eq("id_publicacion", noti.id_referencia);
+    }
+
+    // 6. Actualizar transacción a "reservada"
     await supabase
       .from("transacciones")
       .update({ estado: "reservada" })
       .eq("id_transaccion", trans.id_transaccion);
 
-    // 5. Notificar al comprador
+    // 7. Notificar al comprador
     const { error: notifError } = await supabase.from("notificaciones").insert({
       id_usuario: trans.id_comprador,
       titulo: "¡Tu reserva fue confirmada!",
-      mensaje:
-        "¡Tu reserva fue aceptada! El vendedor confirmó que el producto está listo. Ya puedes ir a recogerlo y coordinar el pago.",
+      mensaje: `¡Tu reserva fue aceptada! Has comprado ${trans.cantidad_unidades} unidades. ${
+        nuevaCantidad <= 0
+          ? "El producto ya no está disponible."
+          : `Al vendedor le quedan ${nuevaCantidad} unidades.`
+      }`,
       tipo: "reserva_confirmada",
       leida: false,
       id_referencia: noti.id_referencia,
       id_transaccion: trans.id_transaccion,
     });
 
-    if (notifError) {
-      console.error("❌ Error al notificar al comprador:", notifError);
-      toast.error(
-        "La reserva se confirmó, pero no se pudo notificar al comprador.",
-      );
-    } else {
-      console.log("✅ Notificación enviada al comprador:", trans.id_comprador);
-      toast.success("Reserva confirmada. Se notificó al comprador.");
-    }
+    if (notifError)
+      console.error("Error al notificar al comprador:", notifError);
+    else toast.success("Reserva confirmada. Stock actualizado.");
 
-    // 6. Notificar al vendedor (opcional)
-    const { data: pub } = await supabase
-      .from("publicaciones")
-      .select("id_usuario, titulo")
-      .eq("id_publicacion", noti.id_referencia)
-      .single();
-
-    if (pub) {
-      await supabase.from("notificaciones").insert({
-        id_usuario: pub.id_usuario,
-        titulo: "Producto reservado",
-        mensaje: `Tu publicación "${pub.titulo}" fue marcada como reservada exitosamente.`,
-        tipo: "producto_reservado",
-        leida: false,
-        id_referencia: noti.id_referencia,
-        id_transaccion: trans.id_transaccion,
-      });
-    }
+    // 8. Notificar al vendedor (opcional)
+    await supabase.from("notificaciones").insert({
+      id_usuario: pub.id_usuario,
+      titulo: "Venta confirmada",
+      mensaje: `Confirmaste la venta de ${trans.cantidad_unidades} unidades de "${pub.titulo}". Stock restante: ${nuevaCantidad}.`,
+      tipo: "producto_reservado",
+      leida: false,
+      id_referencia: noti.id_referencia,
+      id_transaccion: trans.id_transaccion,
+    });
 
     // Actualizar estado local
     setNotificaciones((prev) =>
@@ -221,7 +246,6 @@ export function Dashboard() {
         n.id_notificacion === noti.id_notificacion ? { ...n, leida: true } : n,
       ),
     );
-
     await cargarPublicaciones();
   };
 
@@ -232,28 +256,31 @@ export function Dashboard() {
       .update({ leida: true })
       .eq("id_notificacion", noti.id_notificacion);
 
-    if (!noti.id_referencia) return;
+    if (!noti.id_transaccion) {
+      toast.error("La notificación no tiene una transacción asociada.");
+      return;
+    }
 
-    // Buscar transacción pendiente o reservada
+    // Buscar la transacción específica
     const { data: trans, error: transError } = await supabase
       .from("transacciones")
       .select("id_comprador, id_transaccion, cantidad_unidades, estado")
-      .eq("id_publicacion", noti.id_referencia)
-      .in("estado", ["pendiente", "reservada"])
+      .eq("id_transaccion", noti.id_transaccion)
       .maybeSingle();
 
     if (!trans) {
-      console.error(
-        "❌ No se encontró transacción para rechazar",
-        noti.id_referencia,
-      );
-      toast.error("No se pudo rechazar la solicitud: no existe transacción.");
+      toast.error("No se encontró la solicitud.");
+      return;
+    }
+
+    if (trans.estado !== "pendiente") {
+      toast.error("Esta solicitud ya no está pendiente.");
       return;
     }
 
     if (!trans.id_comprador) {
-      console.error("❌ La transacción no tiene id_comprador", trans);
-      toast.error("Error interno: falta el comprador en la transacción.");
+      console.error("❌ La transacción no tiene comprador", trans);
+      toast.error("Error interno.");
       return;
     }
 
@@ -263,51 +290,20 @@ export function Dashboard() {
       .update({ estado: "cancelada" })
       .eq("id_transaccion", trans.id_transaccion);
 
-    // Notificar al comprador que fue rechazado
+    // Notificar al comprador
     const { error: notifError } = await supabase.from("notificaciones").insert({
       id_usuario: trans.id_comprador,
       titulo: "Reserva no aceptada",
       mensaje:
-        "El vendedor no pudo aceptar tu solicitud en este momento. El producto volvió a estar disponible, puedes volver a intentarlo.",
+        "El vendedor no pudo aceptar tu solicitud. El producto sigue disponible.",
       tipo: "reserva_rechazada",
       leida: false,
       id_referencia: noti.id_referencia,
       id_transaccion: trans.id_transaccion,
     });
 
-    if (notifError) {
-      console.error("❌ Error al notificar rechazo al comprador:", notifError);
-      toast.error(
-        "El rechazo se aplicó, pero no se pudo notificar al comprador.",
-      );
-    } else {
-      console.log(
-        "✅ Notificación de rechazo enviada al comprador:",
-        trans.id_comprador,
-      );
-      toast.success("Solicitud rechazada. Se notificó al comprador.");
-    }
-
-    // Restaurar publicación a activa
-    const { data: pubActual } = await supabase
-      .from("publicaciones")
-      .select("cantidad_unidades")
-      .eq("id_publicacion", noti.id_referencia)
-      .maybeSingle();
-
-    if (pubActual && trans) {
-      const nuevaCantidad =
-        Number(pubActual.cantidad_unidades || 0) +
-        Number(trans.cantidad_unidades || 0);
-      await supabase
-        .from("publicaciones")
-        .update({
-          estado: "activa",
-          visible_marketplace: true,
-          cantidad_unidades: nuevaCantidad,
-        })
-        .eq("id_publicacion", noti.id_referencia);
-    }
+    if (notifError) console.error("Error al notificar rechazo:", notifError);
+    else toast.success("Solicitud rechazada.");
 
     setNotificaciones((prev) =>
       prev.map((n) =>
@@ -428,18 +424,17 @@ export function Dashboard() {
 
   useEffect(() => {
     const fetchData = async () => {
+      // 1. Inventario
       const { data: inventario } = await supabase
         .from("publicaciones")
         .select(`cantidad_unidades, tipos_botella!id_tipo_botella(nombre)`)
         .eq("estado", "activa")
         .eq("visible_marketplace", true);
-
       if (inventario) {
         const agrupado: Record<string, number> = {};
         inventario.forEach((item: any) => {
           const tipo = item.tipos_botella?.nombre || "Otro";
-          if (!agrupado[tipo]) agrupado[tipo] = 0;
-          agrupado[tipo] += item.cantidad_unidades;
+          agrupado[tipo] = (agrupado[tipo] || 0) + item.cantidad_unidades;
         });
         setInventory(
           Object.entries(agrupado).map(([tipo, cantidad]) => ({
@@ -449,11 +444,11 @@ export function Dashboard() {
         );
       }
 
+      // 2. Usuario actual
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
-
       const { data: usuario } = await supabase
         .from("usuarios")
         .select("id_usuario")
@@ -462,102 +457,73 @@ export function Dashboard() {
       if (!usuario) return;
       const idUsuario = usuario.id_usuario;
 
+      // 3. Proveedores (solo para centros de acopio)
       if (!isRecycler) {
         const { data: proveedores } = await supabase
           .from("transacciones")
           .select("id_vendedor, cantidad_unidades")
           .order("cantidad_unidades", { ascending: false })
           .limit(20);
-
         if (proveedores) {
           const idsVendedores = [
             ...new Set(proveedores.map((p) => p.id_vendedor)),
           ];
-
-          const { data: usuarios } = await supabase
+          const { data: usuariosData } = await supabase
             .from("usuarios")
             .select("id_usuario, nombre, calificacion_promedio")
             .in("id_usuario", idsVendedores);
-
           const usuariosMap = new Map(
-            usuarios?.map((u) => [u.id_usuario, u]) || [],
+            usuariosData?.map((u) => [u.id_usuario, u]) || [],
           );
-
-          const agrupado: Record<number, any> = {};
-
-          proveedores.forEach((t: any) => {
+          const agrupadoProveedores: Record<number, any> = {};
+          proveedores.forEach((t) => {
             const id = t.id_vendedor;
-
-            const usuario = usuariosMap.get(id);
-
-            if (!agrupado[id]) {
-              agrupado[id] = {
-                name: usuario?.nombre || "Usuario",
+            const u = usuariosMap.get(id);
+            if (!agrupadoProveedores[id]) {
+              agrupadoProveedores[id] = {
+                name: u?.nombre || "Usuario",
                 bottles: 0,
                 transactions: 0,
-                rating: usuario?.calificacion_promedio || 0,
+                rating: u?.calificacion_promedio || 0,
               };
             }
-
-            agrupado[id].bottles += t.cantidad_unidades;
-            agrupado[id].transactions += 1;
+            agrupadoProveedores[id].bottles += t.cantidad_unidades;
+            agrupadoProveedores[id].transactions += 1;
           });
-
           setTopSuppliers(
-            Object.values(agrupado)
+            Object.values(agrupadoProveedores)
               .sort((a: any, b: any) => b.bottles - a.bottles)
               .slice(0, 4),
           );
         }
       }
 
+      // 4. Publicaciones del usuario
       await cargarPublicaciones();
 
-      const { data: notis, error: notisError } = await supabase
+      // 5. Notificaciones iniciales
+      const { data: notis } = await supabase
         .from("notificaciones")
         .select("*")
         .eq("id_usuario", idUsuario)
         .order("fecha", { ascending: false });
       if (notis) setNotificaciones(notis);
+      console.log("Notificaciones iniciales:", notis);
 
-      const id = parseInt(idUsuario);
-      console.log("NOTIFICACIONES:", notis);
-      console.log("ERROR NOTIS:", notisError);
-
-      const interval = setInterval(async () => {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (!user) return;
-        const { data: usuario } = await supabase
-          .from("usuarios")
-          .select("id_usuario")
-          .eq("correo", user.email)
-          .single();
-        if (usuario) {
-          const { data: notis } = await supabase
-            .from("notificaciones")
-            .select("*")
-            .eq("id_usuario", usuario.id_usuario)
-            .order("fecha", { ascending: false });
-          if (notis) setNotificaciones(notis);
-        }
-      }, 30000);
-      return () => clearInterval(interval);
-
+      // 6. Transacciones completadas (para stats)
       const { data: trans } = await supabase
         .from("transacciones")
         .select(
           `id_transaccion, cantidad_unidades, precio_total_usd, fecha_transaccion, id_comprador, id_vendedor`,
         )
-        .or(`id_comprador.eq.${id},id_vendedor.eq.${id}`)
+        .or(`id_comprador.eq.${idUsuario},id_vendedor.eq.${idUsuario}`)
         .eq("estado", "completada")
         .order("fecha_transaccion", { ascending: false })
         .limit(5);
 
       if (trans) {
         setRecentTransactions(
-          trans.map((t: any) => ({
+          trans.map((t) => ({
             id: t.id_transaccion,
             type:
               t.id_vendedor === parseInt(userId || "0") ? "sale" : "purchase",
@@ -568,11 +534,11 @@ export function Dashboard() {
           })),
         );
         const totalBotellas = trans.reduce(
-          (sum: number, t: any) => sum + (t.cantidad_unidades || 0),
+          (sum, t) => sum + (t.cantidad_unidades || 0),
           0,
         );
         const totalDinero = trans.reduce(
-          (sum: number, t: any) => sum + (t.precio_total_usd || 0),
+          (sum, t) => sum + (t.precio_total_usd || 0),
           0,
         );
         setStats({
@@ -583,8 +549,11 @@ export function Dashboard() {
         });
       }
     };
+
+    // Ejecutar carga inicial
     fetchData();
 
+    // Configurar intervalo para refrescar notificaciones cada 30 segundos
     const intervalId = setInterval(async () => {
       const {
         data: { user },
@@ -605,10 +574,11 @@ export function Dashboard() {
           .order("fecha", { ascending: false });
         if (notis) setNotificaciones(notis);
       }
-    }, 30000); // cada 30 segundos
+    }, 30000);
 
+    // Limpiar intervalo al desmontar
     return () => clearInterval(intervalId);
-  }, []);
+  }, []); // Dependencias vacías
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
