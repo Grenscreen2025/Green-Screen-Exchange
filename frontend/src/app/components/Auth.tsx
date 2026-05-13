@@ -98,11 +98,11 @@ export function Auth() {
     // Obtener tipo_usuario real desde la tabla usuarios
     const { data: usuarioData } = await supabase
       .from("usuarios")
-      .select("tipo_usuario, nombre, moneda")
+      .select("id_usuario, tipo_usuario, nombre, moneda")
       .eq("correo", data.user.email)
       .single();
 
-    localStorage.setItem("userId", data.user.id);
+    localStorage.setItem("userId", usuarioData?.id_usuario?.toString() || "");
     localStorage.setItem("userEmail", data.user.email || "");
     localStorage.setItem("userName", usuarioData?.nombre || "");
     localStorage.setItem("userType", usuarioData?.tipo_usuario || "recycler");
@@ -177,14 +177,14 @@ export function Auth() {
   };
 
   const testLogin = async () => {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: "ana.morales4@mercadoverde.com",
-        password: "12345678",
-      });
-      console.log("DATA:", data);
-      console.log("ERROR:", error);
-      alert(error ? error.message : "¡Login exitoso! " + data.user?.email);
-    };
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: "ana.morales4@mercadoverde.com",
+      password: "12345678",
+    });
+    console.log("DATA:", data);
+    console.log("ERROR:", error);
+    alert(error ? error.message : "¡Login exitoso! " + data.user?.email);
+  };
 
   /* ── Pantalla de confirmación ── */
   if (showConfirmation) {

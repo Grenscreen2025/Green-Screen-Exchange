@@ -38,7 +38,7 @@ export function UserProfile() {
     joinDate: "",
     tipo: "",
   });
-  
+
   const [stats, setStats] = useState({
     totalTransactions: 0,
     totalBottles: 0,
@@ -90,11 +90,13 @@ export function UserProfile() {
     // Obtener estadísticas de transacciones
     const { data: transacciones } = await supabase
       .from("transacciones")
-      .select("cantidad")
-      .or(`id_comprador.eq.${data.id_usuario},id_vendedor.eq.${data.id_usuario}`);
+      .select("cantidad_unidades")
+      .or(
+        `id_comprador.eq.${data.id_usuario},id_vendedor.eq.${data.id_usuario}`,
+      );
 
     const totalBotellas =
-      transacciones?.reduce((sum, t) => sum + t.cantidad, 0) || 0;
+      transacciones?.reduce((sum, t) => sum + t.cantidad_unidades, 0) || 0;
 
     setStats({
       totalTransactions: transacciones?.length || 0,
@@ -110,22 +112,44 @@ export function UserProfile() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
     if (!user) return;
 
+    // 1. Verificar si el correo cambió
+    const emailChanged = profileData.email !== user.email;
+
+    // 2. Si cambió el correo → actualizar Auth
+    if (emailChanged) {
+      const { error: authError } = await supabase.auth.updateUser({
+        email: profileData.email,
+      });
+
+      if (authError) {
+        toast.error(authError.message);
+        return;
+      }
+    }
+
+    // 3. Actualizar tabla usuarios
     const { error } = await supabase
       .from("usuarios")
       .update({
         nombre: profileData.name,
         correo: profileData.email,
       })
-      .eq('correo', user.email);
+      .eq("correo", user.email);
 
     if (error) {
       toast.error("Error al guardar cambios");
       return;
     }
 
-    toast.success("Perfil actualizado correctamente");
+    toast.success(
+      emailChanged
+        ? "Revisa tu nuevo correo para confirmarlo"
+        : "Perfil actualizado correctamente",
+    );
+
     setIsEditing(false);
   };
 

@@ -2,12 +2,12 @@ import { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { Logo } from './logo';
 import {
-  Recycle,
   LayoutDashboard,
   Package,
   List,
   User,
   LogOut,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "./ui/button";
 
@@ -28,26 +28,18 @@ export function Layout({ children }: LayoutProps) {
     navigate("/");
   };
 
-  // Menús diferenciados por tipo de usuario
-  const navItems = isRecycler ? [
-    // Reciclador: Dashboard, Publicar, Perfil (NO Botellas)
-    {
-      path: "/dashboard",
-      icon: LayoutDashboard,
-      label: "Dashboard",
-    },
-    { path: "/publish", icon: Package, label: "Publicar" },
-    { path: "/profile", icon: User, label: "Perfil" },
-  ] : [
-    // Centro de Acopio: Dashboard, Botellas, Perfil (NO Publicar)
-    {
-      path: "/dashboard",
-      icon: LayoutDashboard,
-      label: "Dashboard",
-    },
-    { path: "/bottles", icon: List, label: "Botellas" },
-    { path: "/profile", icon: User, label: "Perfil" },
-  ];
+  const navItems = isRecycler
+    ? [
+        { path: "/dashboard", icon: LayoutDashboard, label: "Inicio" },
+        { path: "/publish",   icon: Package,         label: "Publicar" },
+        { path: "/catalogo",  icon: BookOpen,        label: "Catálogo" },
+        { path: "/profile",   icon: User,            label: "Perfil" },
+      ]
+    : [
+        { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+        { path: "/bottles",   icon: List,            label: "Botellas" },
+        { path: "/profile",   icon: User,            label: "Perfil" },
+      ];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -55,10 +47,7 @@ export function Layout({ children }: LayoutProps) {
       <header className="bg-white border-b sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <Link
-              to="/dashboard"
-              className="flex items-center gap-2"
-            >
+            <Link to="/dashboard" className="flex items-center gap-2">
               <Logo className="size-8" />
               <span className="text-xl font-semibold text-foreground">
                 Mercado Verde
@@ -69,15 +58,12 @@ export function Layout({ children }: LayoutProps) {
             <nav className="hidden md:flex items-center gap-1">
               {navItems.map((item) => {
                 const Icon = item.icon;
-                const isActive =
-                  location.pathname === item.path;
+                const isActive = location.pathname === item.path;
                 return (
                   <Link key={item.path} to={item.path}>
                     <Button
                       variant={isActive ? "default" : "ghost"}
-                      className={
-                        isActive ? "bg-primary text-white" : ""
-                      }
+                      className={isActive ? "bg-primary text-white" : ""}
                     >
                       <Icon className="size-4 mr-2" />
                       {item.label}
@@ -100,13 +86,11 @@ export function Layout({ children }: LayoutProps) {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        {children}
-      </main>
+      <main className="container mx-auto px-4 py-8">{children}</main>
 
       {/* Mobile Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t">
-        <div className="grid grid-cols-3 gap-1 p-2">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t z-50">
+        <div className={`grid gap-1 p-2 ${isRecycler ? "grid-cols-4" : "grid-cols-3"}`}>
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
