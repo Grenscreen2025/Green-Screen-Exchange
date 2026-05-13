@@ -44,9 +44,9 @@ export function UserProfile() {
     bio: "",
     joinDate: "",
     tipo: "",
-    roll: "",
+    rol: "",
   });
-  
+
   const [stats, setStats] = useState({
     totalTransactions: 0,
     totalBottles: 0,
@@ -58,33 +58,33 @@ export function UserProfile() {
     cargarPerfil();
   }, []);
   const handleChangePassword = async (e: React.FormEvent) => {
-      e.preventDefault();
+    e.preventDefault();
 
-      if (passwordData.newPassword !== passwordData.confirmPassword) {
-        toast.error("Las contraseñas no coinciden");
-        return;
-      }
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast.error("Las contraseñas no coinciden");
+      return;
+    }
 
-      if (passwordData.newPassword.length < 8) {
-        toast.error("La contraseña debe tener al menos 8 caracteres");
-        return;
-      }
+    if (passwordData.newPassword.length < 8) {
+      toast.error("La contraseña debe tener al menos 8 caracteres");
+      return;
+    }
 
-      setLoadingPassword(true);
+    setLoadingPassword(true);
 
-      const { error } = await supabase.auth.updateUser({
-        password: passwordData.newPassword,
-      });
+    const { error } = await supabase.auth.updateUser({
+      password: passwordData.newPassword,
+    });
 
-      if (error) {
-        toast.error("Error al cambiar contraseña: " + error.message);
-      } else {
-        toast.success("Contraseña actualizada correctamente");
-        setShowChangePassword(false);
-        setPasswordData({ newPassword: "", confirmPassword: "" });
-      }
-      setLoadingPassword(false);
-    };
+    if (error) {
+      toast.error("Error al cambiar contraseña: " + error.message);
+    } else {
+      toast.success("Contraseña actualizada correctamente");
+      setShowChangePassword(false);
+      setPasswordData({ newPassword: "", confirmPassword: "" });
+    }
+    setLoadingPassword(false);
+  };
 
   const cargarPerfil = async () => {
     setLoading(true);
@@ -119,7 +119,7 @@ export function UserProfile() {
       bio: "",
       joinDate: data.fecha_registro || "",
       tipo: data.tipo_usuario || "",
-      roll: data.rol || "user",
+      rol: data.rol || "user",
     });
 
     // Obtener estadísticas de transacciones
@@ -152,35 +152,43 @@ export function UserProfile() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-
     if (!user) return;
 
-    // 1. Verificar si el correo cambió
-    const emailChanged = profileData.email !== user.email;
+    // Obtener el ID del usuario actual
+    const { data: usuarioData, error: idError } = await supabase
+      .from("usuarios")
+      .select("id_usuario")
+      .eq("correo", user.email)
+      .single();
+    if (idError || !usuarioData) {
+      toast.error("No se pudo identificar el usuario");
+      return;
+    }
 
-    // 2. Si cambió el correo → actualizar Auth
+    const emailChanged = profileData.email !== user.email;
     if (emailChanged) {
       const { error: authError } = await supabase.auth.updateUser({
         email: profileData.email,
       });
-
       if (authError) {
         toast.error(authError.message);
         return;
       }
     }
 
-    // 3. Actualizar tabla usuarios
+    // Actualizar tabla usuarios usando id_usuario
     const { error } = await supabase
       .from("usuarios")
       .update({
         nombre: profileData.name,
         correo: profileData.email,
+        telefono: profileData.phone,
+        ciudad_base: profileData.location,
       })
-      .eq("correo", user.email);
+      .eq("id_usuario", usuarioData.id_usuario); // ← clave correcta
 
     if (error) {
-      toast.error("Error al guardar cambios");
+      toast.error("Error al guardar cambios: " + error.message);
       return;
     }
 
@@ -189,6 +197,10 @@ export function UserProfile() {
         ? "Revisa tu nuevo correo para confirmarlo"
         : "Perfil actualizado correctamente",
     );
+
+    // Actualizar localStorage (opcional, para mantener sincronía)
+    localStorage.setItem("userEmail", profileData.email);
+    localStorage.setItem("userName", profileData.name);
 
     setIsEditing(false);
   };
@@ -206,7 +218,7 @@ export function UserProfile() {
   }
 
   const isRecycler = profileData.tipo === "recycler";
-  const isAdmin = profileData.roll === "admin";
+  const isAdmin = profileData.rol === "admin";
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
