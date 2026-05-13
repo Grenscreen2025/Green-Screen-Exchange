@@ -1,9 +1,10 @@
-import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
-import { 
-  ArrowLeft, 
-  Package, 
-  DollarSign, 
+import { useState } from "react";
+import { supabase } from "./supabaseClient";
+import { useNavigate, useSearchParams } from "react-router";
+import {
+  ArrowLeft,
+  Package,
+  DollarSign,
   MapPin,
   User,
   Calendar,
@@ -11,17 +12,23 @@ import {
   CheckCircle2,
   AlertCircle,
   Truck,
-  Shield
-} from 'lucide-react';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { Textarea } from './ui/textarea';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Badge } from './ui/badge';
-import { Separator } from './ui/separator';
-import { RadioGroup, RadioGroupItem } from './ui/radio-group';
-import { toast } from 'sonner';
+  Shield,
+} from "lucide-react";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Textarea } from "./ui/textarea";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
+import { Badge } from "./ui/badge";
+import { Separator } from "./ui/separator";
+import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
+import { toast } from "sonner";
 
 interface PurchaseData {
   id: number;
@@ -35,47 +42,123 @@ interface PurchaseData {
 export function PurchaseConfirmation() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const bottleId = searchParams.get('id') || '1';
+  const bottleId = searchParams.get("id") || "1";
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
   const [purchaseData] = useState<PurchaseData>({
     id: parseInt(bottleId),
-    seller: 'María González',
+    seller: "María González",
     quantity: 500,
-    bottleType: 'PET (Polietileno Tereftalato)',
-    pricePerUnit: 1.50,
-    location: 'Bogotá, Cundinamarca',
+    bottleType: "PET (Polietileno Tereftalato)",
+    pricePerUnit: 1.5,
+    location: "Bogotá, Cundinamarca",
   });
 
   const [formData, setFormData] = useState({
-    paymentMethod: 'cash',
-    deliveryDate: '',
-    deliveryAddress: '',
-    notes: '',
+    paymentMethod: "cash",
+    deliveryDate: "",
+    deliveryAddress: "",
+    notes: "",
   });
 
   const totalPrice = purchaseData.quantity * purchaseData.pricePerUnit;
 
   const handleChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleConfirmPurchase = (e: React.FormEvent) => {
+  const handleConfirmPurchase = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsProcessing(true);
 
-    // Simular procesamiento
-    setTimeout(() => {
+    // 1. Obtener usuario comprador logueado
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("Debes iniciar sesión");
       setIsProcessing(false);
-      setShowSuccess(true);
-      toast.success('¡Compra confirmada exitosamente!');
+      return;
+    }
 
-      // Redirigir al dashboard después de 3 segundos
-      setTimeout(() => {
-        navigate('/dashboard');
-      }, 3000);
-    }, 1500);
+    // 2. Obtener id_usuario del comprador desde tabla usuarios
+    const { data: comprador, error: userError } = await supabase
+      .from("usuarios")
+      .select("id_usuario, nombre")
+      .eq("correo", user.email)
+      .single();
+
+    if (userError || !comprador) {
+      toast.error("No se encontró tu perfil");
+      setIsProcessing(false);
+      return;
+    }
+
+    // 3. Obtener datos de la publicación (desde la URL o estado)
+    //    Asumiendo que tienes bottleId y los datos en el estado (purchaseData)
+    const { data: publicacion, error: pubError } = await supabase
+      .from("publicaciones")
+      .select("id_usuario, precio_unitario, cantidad_unidades, titulo")
+      .eq("id_publicacion", purchaseData.id)
+      .single();
+
+    if (pubError || !publicacion) {
+      toast.error("La publicación ya no está disponible");
+      setIsProcessing(false);
+      return;
+    }
+
+    // 4. Verificar que haya stock suficiente
+    if (publicacion.cantidad_unidades < purchaseData.quantity) {
+      toast.error("Stock insuficiente. Actualiza la página.");
+      setIsProcessing(false);
+      return;
+    }
+
+    // 5. Crear transacción con estado 'pendiente'
+    const { data: trans, error: transError } = await supabase
+      .from("transacciones")
+      .insert({
+        id_publicacion: purchaseData.id,
+        id_vendedor: publicacion.id_usuario,
+        id_comprador: comprador.id_usuario,
+        cantidad_unidades: purchaseData.quantity,
+        precio_total_usd: purchaseData.quantity * publicacion.precio_unitario,
+        estado: "pendiente",
+        fecha_transaccion: new Date().toISOString().split("T")[0],
+      })
+      .select()
+      .single();
+
+    if (transError) {
+      toast.error("Error al crear la solicitud: " + transError.message);
+      setIsProcessing(false);
+      return;
+    }
+
+    // 6. Notificar al vendedor
+    const { error: notifError } = await supabase.from("notificaciones").insert({
+      id_usuario: publicacion.id_usuario,
+      titulo: "Nueva solicitud de compra",
+      mensaje: `${comprador.nombre} quiere comprar ${purchaseData.quantity} botellas de "${publicacion.titulo}".`,
+      tipo: "compra",
+      leida: false,
+      id_referencia: purchaseData.id,
+      id_transaccion: trans.id_transaccion,
+    });
+
+    if (notifError) {
+      console.error("Notificación al vendedor falló:", notifError);
+      // No fallamos la compra, solo advertimos
+      toast.warning("Solicitud creada, pero no se pudo notificar al vendedor.");
+    } else {
+      toast.success("¡Solicitud enviada! Espera la confirmación del vendedor.");
+    }
+
+    setIsProcessing(false);
+    setShowSuccess(true);
+    setTimeout(() => navigate("/dashboard"), 3000);
   };
 
   // Success Screen
@@ -91,8 +174,8 @@ export function PurchaseConfirmation() {
               ¡Compra Confirmada!
             </h2>
             <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-              Tu solicitud de compra ha sido enviada al vendedor. 
-              Recibirás una notificación cuando confirme la transacción.
+              Tu solicitud de compra ha sido enviada al vendedor. Recibirás una
+              notificación cuando confirme la transacción.
             </p>
 
             {/* Order Summary */}
@@ -100,17 +183,24 @@ export function PurchaseConfirmation() {
               <div className="bg-green-50 border border-green-200 rounded-lg p-6 space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Cantidad</span>
-                  <span className="font-semibold">{purchaseData.quantity} botellas</span>
+                  <span className="font-semibold">
+                    {purchaseData.quantity} botellas
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Tipo</span>
-                  <span className="font-semibold">{purchaseData.bottleType}</span>
+                  <span className="font-semibold">
+                    {purchaseData.bottleType}
+                  </span>
                 </div>
                 <Separator />
                 <div className="flex justify-between">
                   <span className="font-medium">Total</span>
                   <span className="text-2xl font-bold text-green-600">
-                    ${totalPrice.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                    $
+                    {totalPrice.toLocaleString("es-ES", {
+                      minimumFractionDigits: 2,
+                    })}
                   </span>
                 </div>
               </div>
@@ -121,7 +211,7 @@ export function PurchaseConfirmation() {
                 Redirigiendo al dashboard en 3 segundos...
               </p>
               <Button
-                onClick={() => navigate('/dashboard')}
+                onClick={() => navigate("/dashboard")}
                 className="bg-primary hover:bg-green-600"
               >
                 Ir al Dashboard Ahora
@@ -167,32 +257,48 @@ export function PurchaseConfirmation() {
             <CardContent className="space-y-4">
               <div className="grid gap-3">
                 <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm text-muted-foreground">Vendedor</span>
-                  <span className="font-semibold text-foreground">{purchaseData.seller}</span>
+                  <span className="text-sm text-muted-foreground">
+                    Vendedor
+                  </span>
+                  <span className="font-semibold text-foreground">
+                    {purchaseData.seller}
+                  </span>
                 </div>
 
                 <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm text-muted-foreground">Tipo de Plástico</span>
-                  <span className="font-semibold text-foreground">{purchaseData.bottleType}</span>
+                  <span className="text-sm text-muted-foreground">
+                    Tipo de Plástico
+                  </span>
+                  <span className="font-semibold text-foreground">
+                    {purchaseData.bottleType}
+                  </span>
                 </div>
 
                 <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm text-muted-foreground">Cantidad</span>
+                  <span className="text-sm text-muted-foreground">
+                    Cantidad
+                  </span>
                   <span className="font-semibold text-foreground">
                     {purchaseData.quantity.toLocaleString()} botellas
                   </span>
                 </div>
 
                 <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm text-muted-foreground">Precio por unidad</span>
+                  <span className="text-sm text-muted-foreground">
+                    Precio por unidad
+                  </span>
                   <span className="font-semibold text-foreground">
                     ${purchaseData.pricePerUnit.toFixed(2)}
                   </span>
                 </div>
 
                 <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm text-muted-foreground">Ubicación del vendedor</span>
-                  <span className="font-semibold text-foreground">{purchaseData.location}</span>
+                  <span className="text-sm text-muted-foreground">
+                    Ubicación del vendedor
+                  </span>
+                  <span className="font-semibold text-foreground">
+                    {purchaseData.location}
+                  </span>
                 </div>
               </div>
             </CardContent>
@@ -212,7 +318,9 @@ export function PurchaseConfirmation() {
             <CardContent>
               <form onSubmit={handleConfirmPurchase} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="deliveryDate">Fecha de Recolección Preferida</Label>
+                  <Label htmlFor="deliveryDate">
+                    Fecha de Recolección Preferida
+                  </Label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-3 size-4 text-muted-foreground" />
                     <Input
@@ -220,9 +328,11 @@ export function PurchaseConfirmation() {
                       type="date"
                       className="pl-10"
                       value={formData.deliveryDate}
-                      onChange={(e) => handleChange('deliveryDate', e.target.value)}
+                      onChange={(e) =>
+                        handleChange("deliveryDate", e.target.value)
+                      }
                       required
-                      min={new Date().toISOString().split('T')[0]}
+                      min={new Date().toISOString().split("T")[0]}
                     />
                   </div>
                 </div>
@@ -237,7 +347,9 @@ export function PurchaseConfirmation() {
                       placeholder="Calle, número, ciudad..."
                       className="pl-10"
                       value={formData.deliveryAddress}
-                      onChange={(e) => handleChange('deliveryAddress', e.target.value)}
+                      onChange={(e) =>
+                        handleChange("deliveryAddress", e.target.value)
+                      }
                       required
                     />
                   </div>
@@ -250,7 +362,7 @@ export function PurchaseConfirmation() {
                     placeholder="Instrucciones especiales, horarios preferidos, etc..."
                     className="min-h-[100px]"
                     value={formData.notes}
-                    onChange={(e) => handleChange('notes', e.target.value)}
+                    onChange={(e) => handleChange("notes", e.target.value)}
                   />
                 </div>
               </form>
@@ -269,12 +381,17 @@ export function PurchaseConfirmation() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <RadioGroup value={formData.paymentMethod} onValueChange={(value) => handleChange('paymentMethod', value)}>
+              <RadioGroup
+                value={formData.paymentMethod}
+                onValueChange={(value) => handleChange("paymentMethod", value)}
+              >
                 <div className="flex items-center space-x-3 border rounded-lg p-4 hover:bg-green-50 transition-colors">
                   <RadioGroupItem value="cash" id="cash" />
                   <Label htmlFor="cash" className="flex-1 cursor-pointer">
                     <div className="font-medium">Efectivo al Recibir</div>
-                    <div className="text-sm text-muted-foreground">Pago en efectivo al momento de la entrega</div>
+                    <div className="text-sm text-muted-foreground">
+                      Pago en efectivo al momento de la entrega
+                    </div>
                   </Label>
                 </div>
 
@@ -282,7 +399,9 @@ export function PurchaseConfirmation() {
                   <RadioGroupItem value="transfer" id="transfer" />
                   <Label htmlFor="transfer" className="flex-1 cursor-pointer">
                     <div className="font-medium">Transferencia Bancaria</div>
-                    <div className="text-sm text-muted-foreground">Coordinar transferencia con el vendedor</div>
+                    <div className="text-sm text-muted-foreground">
+                      Coordinar transferencia con el vendedor
+                    </div>
                   </Label>
                 </div>
 
@@ -290,7 +409,9 @@ export function PurchaseConfirmation() {
                   <RadioGroupItem value="other" id="other" />
                   <Label htmlFor="other" className="flex-1 cursor-pointer">
                     <div className="font-medium">Otro Método</div>
-                    <div className="text-sm text-muted-foreground">A coordinar directamente con el vendedor</div>
+                    <div className="text-sm text-muted-foreground">
+                      A coordinar directamente con el vendedor
+                    </div>
                   </Label>
                 </div>
               </RadioGroup>
@@ -305,10 +426,19 @@ export function PurchaseConfirmation() {
                 <div className="space-y-2">
                   <p className="font-medium text-amber-900">Importante</p>
                   <ul className="text-sm text-amber-800 space-y-1 list-disc list-inside">
-                    <li>Esta es una solicitud de compra que debe ser confirmada por el vendedor</li>
-                    <li>Coordina directamente con el vendedor los detalles finales</li>
-                    <li>Verifica el material antes de realizar el pago completo</li>
-                    <li>Mercado Verde facilita la conexión pero no procesa pagos</li>
+                    <li>
+                      Esta es una solicitud de compra que debe ser confirmada
+                      por el vendedor
+                    </li>
+                    <li>
+                      Coordina directamente con el vendedor los detalles finales
+                    </li>
+                    <li>
+                      Verifica el material antes de realizar el pago completo
+                    </li>
+                    <li>
+                      Mercado Verde facilita la conexión pero no procesa pagos
+                    </li>
                   </ul>
                 </div>
               </div>
@@ -330,7 +460,7 @@ export function PurchaseConfirmation() {
               className="flex-1 bg-primary hover:bg-green-600"
               disabled={isProcessing}
             >
-              {isProcessing ? 'Procesando...' : 'Confirmar Compra'}
+              {isProcessing ? "Procesando..." : "Confirmar Compra"}
             </Button>
           </div>
         </div>
@@ -350,12 +480,16 @@ export function PurchaseConfirmation() {
 
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Cantidad</span>
-                  <span className="font-medium">{purchaseData.quantity} botellas</span>
+                  <span className="font-medium">
+                    {purchaseData.quantity} botellas
+                  </span>
                 </div>
 
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Precio/unidad</span>
-                  <span className="font-medium">${purchaseData.pricePerUnit}</span>
+                  <span className="font-medium">
+                    ${purchaseData.pricePerUnit}
+                  </span>
                 </div>
 
                 <Separator />
@@ -363,7 +497,10 @@ export function PurchaseConfirmation() {
                 <div className="flex justify-between items-center">
                   <span className="font-semibold">Total a Pagar</span>
                   <span className="text-2xl font-bold text-green-600">
-                    ${totalPrice.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                    $
+                    {totalPrice.toLocaleString("es-ES", {
+                      minimumFractionDigits: 2,
+                    })}
                   </span>
                 </div>
               </div>
@@ -374,9 +511,12 @@ export function PurchaseConfirmation() {
                 <div className="flex items-start gap-2">
                   <Shield className="size-5 text-blue-600 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium text-blue-900">Compra Protegida</p>
+                    <p className="text-sm font-medium text-blue-900">
+                      Compra Protegida
+                    </p>
                     <p className="text-xs text-blue-700 mt-1">
-                      Tu transacción está respaldada por nuestras políticas de seguridad
+                      Tu transacción está respaldada por nuestras políticas de
+                      seguridad
                     </p>
                   </div>
                 </div>

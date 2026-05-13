@@ -200,14 +200,14 @@ export function Auth() {
   };
 
   const testLogin = async () => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: "ana.morales4@mercadoverde.com",
-      password: "12345678",
-    });
-    console.log("DATA:", data);
-    console.log("ERROR:", error);
-    alert(error ? error.message : "¡Login exitoso! " + data.user?.email);
-  };
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: "ana.morales4@mercadoverde.com",
+        password: "12345678",
+      });
+      console.log("DATA:", data);
+      console.log("ERROR:", error);
+      alert(error ? error.message : "¡Login exitoso! " + data.user?.email);
+    };
 
   /* ── Pantalla de confirmación ── */
   return (

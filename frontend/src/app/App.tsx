@@ -1,21 +1,22 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
-import { Toaster } from 'sonner';
-import { Landing } from './components/Landing';
-import { Auth } from './components/Auth';
-import { Dashboard } from './components/Dashboard';
-import { PublishBottles } from './components/PublishBottles';
-import { BottlesList } from './components/BottlesList';
-import { UserProfile } from './components/UserProfile';
-import { Layout } from './components/Layout';
+import { BrowserRouter, Routes, Route, Navigate } from "react-router";
+import { Toaster } from "sonner";
+import { Landing } from "./components/Landing";
+import { Auth } from "./components/Auth";
+import { Dashboard } from "./components/Dashboard";
+import { PublishBottles } from "./components/PublishBottles";
+import { BottlesList } from "./components/BottlesList";
+import { UserProfile } from "./components/UserProfile";
+import { Layout } from "./components/Layout";
+import { Catalogo } from "./components/Catalogo";
 
 // Protected Route Component
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const userType = localStorage.getItem('userType');
-  
+  const userType = localStorage.getItem("userType");
+
   if (!userType) {
     return <Navigate to="/auth" replace />;
   }
-  
+
   return <Layout>{children}</Layout>;
 }
 
@@ -59,6 +60,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <UserProfile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/catalogo"
+            element={
+              <ProtectedRoute>
+                <Catalogo />
               </ProtectedRoute>
             }
           />

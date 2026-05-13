@@ -8,7 +8,8 @@ import {
   DollarSign,
   User,
   Building2,
- 
+  MessageCircle,
+  ShoppingCart,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -28,9 +29,12 @@ import {
 } from "./ui/select";
 import { Badge } from "./ui/badge";
 import { supabase } from "./supabaseClient";
+import { toast } from "sonner";
+import { Label } from "./ui/label";
 
 interface BottleListing {
   id: number;
+  id_vendedor: number;
   seller: string;
   sellerType: "recycler" | "center";
   telefono: string;
@@ -45,6 +49,12 @@ interface BottleListing {
 }
 
 export function BottlesList() {
+  const [showBuyModal, setShowBuyModal] = useState(false);
+  const [selectedListing, setSelectedListing] = useState<BottleListing | null>(
+    null,
+  );
+  const [cantidadCompra, setCantidadCompra] = useState("");
+  const [loadingCompra, setLoadingCompra] = useState(false);
   const userType = localStorage.getItem("userType") || "recycler";
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState("all");
@@ -58,10 +68,97 @@ export function BottlesList() {
     cargarDatos();
   }, []);
 
+  const handleComprar = (listing: BottleListing) => {
+    setSelectedListing(listing);
+    setCantidadCompra(listing.quantity.toString());
+    setShowBuyModal(true);
+  };
+
+  // Dentro de confirmarCompra (BottlesList.tsx)
+  const confirmarCompra = async (total: boolean) => {
+    if (!selectedListing) return;
+    setLoadingCompra(true);
+
+    const cantidad = total
+      ? selectedListing.quantity
+      : parseInt(cantidadCompra);
+    if (!cantidad || cantidad <= 0 || cantidad > selectedListing.quantity) {
+      toast.error("Cantidad inválida");
+      setLoadingCompra(false);
+      return;
+    }
+
+    const precioTotal = cantidad * selectedListing.pricePerUnit;
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("Usuario no autenticado");
+      setLoadingCompra(false);
+      return;
+    }
+
+    const { data: comprador, error: compradorError } = await supabase
+      .from("usuarios")
+      .select("id_usuario")
+      .eq("correo", user.email)
+      .single();
+    if (compradorError || !comprador) {
+      toast.error("No se pudo obtener el comprador");
+      setLoadingCompra(false);
+      return;
+    }
+
+    // ✅ Solo crear transacción pendiente (NO tocar la publicación)
+    const { data: transCreada, error } = await supabase
+      .from("transacciones")
+      .insert({
+        id_publicacion: selectedListing.id,
+        id_vendedor: selectedListing.id_vendedor,
+        id_comprador: comprador.id_usuario,
+        cantidad_unidades: cantidad,
+        precio_total_usd: precioTotal,
+        fecha_transaccion: new Date().toISOString().split("T")[0],
+        estado: "pendiente",
+      })
+      .select()
+      .single();
+
+    if (error) {
+      toast.error("Error al registrar transacción: " + error.message);
+      setLoadingCompra(false);
+      return;
+    }
+
+    // Notificar al vendedor
+    const { error: notiError } = await supabase.from("notificaciones").insert({
+      id_usuario: selectedListing.id_vendedor,
+      titulo: "¡Nueva solicitud de compra!",
+      mensaje: `${localStorage.getItem("userName")} quiere comprar ${cantidad.toLocaleString()} unidades de ${selectedListing.bottleType} por ${selectedListing.moneda} ${precioTotal.toLocaleString()}`,
+      tipo: "compra",
+      leida: false,
+      id_referencia: selectedListing.id,
+      id_transaccion: transCreada.id_transaccion,
+    });
+
+    if (notiError) console.error("Error creando notificación:", notiError);
+    else
+      toast.success("¡Solicitud enviada! Espera la confirmación del vendedor.");
+
+    setShowBuyModal(false);
+    setLoadingCompra(false);
+    // Recargar la lista para reflejar que la publicación sigue igual (no cambió)
+    await cargarDatos();
+  };
+
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const obtenerRol = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
       const { data } = await supabase
         .from("usuarios")
@@ -76,7 +173,6 @@ export function BottlesList() {
 
     obtenerRol();
   }, []);
-  const [isAdmin, setIsAdmin] = useState(false);
 
   const cargarDatos = async () => {
     setLoading(true);
@@ -85,13 +181,15 @@ export function BottlesList() {
     const { data: tipos } = await supabase
       .from("tipos_botella")
       .select("id_tipo_botella, nombre");
-    setTiposBotella(tipos || []);
-
-    // Cargar ubicaciones para filtros
+    setTiposBotella(
+      (tipos || []).filter((t) => t.nombre && t.nombre.trim() !== ""),
+    );
     const { data: ubics } = await supabase
       .from("ubicaciones")
       .select("id_ubicacion, ciudad, pais");
-    setUbicaciones(ubics || []);
+    setUbicaciones(
+      (ubics || []).filter((u) => u.ciudad && u.ciudad.trim() !== ""),
+    );
 
     // Cargar publicaciones con joins
     const { data, error } = await supabase
@@ -99,6 +197,7 @@ export function BottlesList() {
       .select(
         `
         id_publicacion,
+        id_usuario,
         titulo,
         cantidad_unidades,
         precio_unitario,
@@ -111,6 +210,7 @@ export function BottlesList() {
       `,
       )
       .eq("estado", "activa")
+      .eq("visible_marketplace", true)
       .order("fecha_publicacion", { ascending: false });
 
     if (error) {
@@ -121,6 +221,7 @@ export function BottlesList() {
 
     const mapped: BottleListing[] = (data || []).map((p: any) => ({
       id: p.id_publicacion,
+      id_vendedor: p.id_usuario || 0,
       sellerId: p.usuarios?.id_usuario,
       seller: p.usuarios?.nombre || "Vendedor",
       sellerType: p.usuarios?.tipo_usuario === "center" ? "center" : "recycler",
@@ -151,21 +252,20 @@ export function BottlesList() {
     window.open(url, "_blank");
   };
 
-    
-    const eliminarPublicacion = async (id: number) => {
+  const eliminarPublicacion = async (id: number) => {
+    const confirmar = confirm("¿Eliminar esta publicación?");
+    if (!confirmar) return;
     const { error } = await supabase
       .from("publicaciones")
-      .delete()
+      .update({ eliminado: true })
       .eq("id_publicacion", id);
-
     if (error) {
-      alert("Error al eliminar");
+      toast.error("Error al eliminar");
     } else {
-      alert("Publicación eliminada");
-      cargarDatos(); // 🔥 refresca la lista
+      toast.success("Publicación eliminada");
+      cargarDatos(); // refrescar lista
     }
   };
-
   const filteredListings = listings.filter((listing) => {
     const matchesSearch =
       listing.seller.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -223,14 +323,16 @@ export function BottlesList() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos los tipos</SelectItem>
-                  {tiposBotella.map((t) => (
-                    <SelectItem
-                      key={t.id_tipo_botella}
-                      value={t.nombre.toLowerCase()}
-                    >
-                      {t.nombre}
-                    </SelectItem>
-                  ))}
+                  {tiposBotella
+                    .filter((t) => t.nombre && t.nombre.trim() !== "") // solo nombres no vacíos
+                    .map((t) => (
+                      <SelectItem
+                        key={t.id_tipo_botella}
+                        value={t.nombre.toLowerCase()}
+                      >
+                        {t.nombre}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -246,11 +348,13 @@ export function BottlesList() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas las ubicaciones</SelectItem>
-                  {ubicaciones.map((u) => (
-                    <SelectItem key={u.id_ubicacion} value={u.ciudad}>
-                      {u.ciudad}, {u.pais}
-                    </SelectItem>
-                  ))}
+                  {ubicaciones
+                    .filter((u) => u.ciudad && u.ciudad.trim() !== "") // solo ciudades no vacías
+                    .map((u) => (
+                      <SelectItem key={u.id_ubicacion} value={u.ciudad}>
+                        {u.ciudad}, {u.pais}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -265,18 +369,18 @@ export function BottlesList() {
         {(searchQuery ||
           selectedType !== "all" ||
           selectedLocation !== "all") && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSearchQuery("");
-                setSelectedType("all");
-                setSelectedLocation("all");
-              }}
-            >
-              Limpiar filtros
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSearchQuery("");
+              setSelectedType("all");
+              setSelectedLocation("all");
+            }}
+          >
+            Limpiar filtros
+          </Button>
+        )}
       </div>
 
       {loading ? (
@@ -386,9 +490,23 @@ export function BottlesList() {
                   </span>
 
                   <div className="flex gap-2">
-                   
-                
-                    {/* BOTÓN ADMIN */}
+                    <Button
+                      size="sm"
+                      className="bg-primary hover:bg-green-600"
+                      onClick={() => handleComprar(listing)}
+                    >
+                      <ShoppingCart className="size-4 mr-2" />
+                      Comprar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-green-500 text-green-600"
+                      onClick={() => handleContactar(listing)}
+                    >
+                      <MessageCircle className="size-4 mr-2" />
+                      WhatsApp
+                    </Button>
                     {isAdmin && (
                       <Button
                         size="sm"
@@ -406,7 +524,6 @@ export function BottlesList() {
         </div>
       )}
 
-
       {!loading && filteredListings.length === 0 && (
         <Card className="border-dashed">
           <CardContent className="py-12 text-center">
@@ -417,9 +534,89 @@ export function BottlesList() {
             <p className="text-muted-foreground mb-4">
               Intenta ajustar tus filtros de búsqueda
             </p>
-            
           </CardContent>
         </Card>
+      )}
+      {showBuyModal && selectedListing && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md border-green-100 shadow-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShoppingCart className="size-5 text-primary" />
+                Confirmar Compra
+              </CardTitle>
+              <CardDescription>
+                {selectedListing.bottleType} — {selectedListing.seller}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-4 bg-green-50 rounded-lg space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Disponible</span>
+                  <span className="font-medium">
+                    {selectedListing.quantity.toLocaleString()} unidades
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Precio por unidad
+                  </span>
+                  <span className="font-medium">
+                    {selectedListing.moneda} {selectedListing.pricePerUnit}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Cantidad a comprar</Label>
+                <Input
+                  type="number"
+                  value={cantidadCompra}
+                  onChange={(e) => setCantidadCompra(e.target.value)}
+                  min="1"
+                  max={selectedListing.quantity}
+                  placeholder="Ingresa la cantidad"
+                />
+                {cantidadCompra && (
+                  <p className="text-sm text-primary font-medium">
+                    Total: {selectedListing.moneda}{" "}
+                    {(
+                      parseInt(cantidadCompra) * selectedListing.pricePerUnit
+                    ).toLocaleString()}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <Button
+                  className="w-full bg-primary hover:bg-green-600"
+                  onClick={() => confirmarCompra(false)}
+                  disabled={loadingCompra}
+                >
+                  {loadingCompra
+                    ? "Procesando..."
+                    : `Comprar ${cantidadCompra} unidades`}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full border-green-500 text-green-600"
+                  onClick={() => confirmarCompra(true)}
+                  disabled={loadingCompra}
+                >
+                  Comprar todo ({selectedListing.quantity.toLocaleString()}{" "}
+                  unidades)
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => setShowBuyModal(false)}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );

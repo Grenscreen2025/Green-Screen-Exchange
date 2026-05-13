@@ -46,7 +46,7 @@ export function UserProfile() {
     tipo: "",
     roll: "",
   });
-
+  
   const [stats, setStats] = useState({
     totalTransactions: 0,
     totalBottles: 0,
@@ -152,8 +152,25 @@ export function UserProfile() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
     if (!user) return;
 
+    // 1. Verificar si el correo cambió
+    const emailChanged = profileData.email !== user.email;
+
+    // 2. Si cambió el correo → actualizar Auth
+    if (emailChanged) {
+      const { error: authError } = await supabase.auth.updateUser({
+        email: profileData.email,
+      });
+
+      if (authError) {
+        toast.error(authError.message);
+        return;
+      }
+    }
+
+    // 3. Actualizar tabla usuarios
     const { error } = await supabase
       .from("usuarios")
       .update({
@@ -167,7 +184,12 @@ export function UserProfile() {
       return;
     }
 
-    toast.success("Perfil actualizado correctamente");
+    toast.success(
+      emailChanged
+        ? "Revisa tu nuevo correo para confirmarlo"
+        : "Perfil actualizado correctamente",
+    );
+
     setIsEditing(false);
   };
 

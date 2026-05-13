@@ -68,6 +68,7 @@ export function PublishBottles() {
   const isEditMode = !!id;
   const navigate = useNavigate();
 
+  const isEditing = !!id;
   const userType = localStorage.getItem("userType") || "recycler";
   const moneda = localStorage.getItem("userMoneda") || "COP";
   const isRecycler = userType === "recycler";
@@ -96,6 +97,31 @@ export function PublishBottles() {
   const [loading, setLoading] = useState(false);
 
   const [bottleTypes, setBottleTypes] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!isEditing) return;
+
+    const cargarPublicacion = async () => {
+      const { data, error } = await supabase
+        .from("publicaciones")
+        .select("*")
+        .eq("id_publicacion", id)
+        .single();
+
+      if (error || !data) return;
+
+      setFormData({
+        titulo: data.titulo || "",
+        quantity: data.cantidad_unidades?.toString() || "",
+        bottleType: data.id_tipo_botella?.toString() || "",
+        pricePerUnit: data.precio_unitario?.toString() || "",
+        description: data.descripcion || "",
+      });
+    };
+
+    cargarPublicacion();
+  }, [id]);
+
   useEffect(() => {
     const fetchTipos = async () => {
       const { data, error } = await supabase.from("tipos_botella").select("*");
@@ -290,35 +316,57 @@ export function PublishBottles() {
       return;
     }
 
-    if (isEditMode) {
+    if (isEditing) {
       const { error } = await supabase
         .from("publicaciones")
         .update({
-          titulo: formData.titulo,
+          id_ubicacion: idUbicacion,
+          id_tipo_botella: parseInt(formData.bottleType),
           cantidad_unidades: parseInt(formData.quantity),
           precio_unitario: parseFloat(formData.pricePerUnit),
           descripcion: formData.description,
-          id_tipo_botella: parseInt(formData.bottleType),
-          id_ubicacion: idUbicacion,
+          titulo:
+            formData.titulo ||
+            `${formData.bottleType} - ${formData.quantity} unidades`,
         })
         .eq("id_publicacion", id);
 
       if (error) {
-        toast.error("Error al actualizar: " + error.message);
+        toast.error(error.message);
         setLoading(false);
         return;
       }
 
-      // 🔥 ESTO ES LO QUE TE FALTA
-      toast.success("Publicación actualizada");
-
+      toast.success("¡Publicación actualizada correctamente!");
       setLoading(false);
+      navigate("/dashboard");
+    } else {
+      const { error } = await supabase.from("publicaciones").insert({
+        id_usuario: usuario.id_usuario,
+        id_ubicacion: idUbicacion,
+        id_tipo_botella: parseInt(formData.bottleType),
+        cantidad_unidades: parseInt(formData.quantity),
+        precio_unitario: parseFloat(formData.pricePerUnit),
+        descripcion: formData.description,
+        titulo:
+          formData.titulo ||
+          `${formData.bottleType} - ${formData.quantity} unidades`,
+        estado: "activa",
+        visible_marketplace: true,
+        fecha_publicacion: new Date().toISOString().split("T")[0],
+      });
 
+      if (error) {
+        toast.error(error.message);
+        setLoading(false);
+        return;
+      }
+      toast.success("¡Publicación creada exitosamente!");
+      setLoading(false);
+      setShowSuccess(true); // muestra pantalla de éxito
       setTimeout(() => {
-        navigate("/dashboard");
-      }, 1000);
-
-      return; // 🔥 IMPORTANTE
+        navigate("/bottles"); // redirige después de 2s
+      }, 2000);
     }
   };
 
@@ -349,12 +397,8 @@ export function PublishBottles() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-foreground">
-          {isRecycler
-            ? "Editar Publicación"
-            : isRecycler
-              ? "Publicar Botellas para Venta"
-              : "Publicar Solicitud de Compra"}
+        <h1 className="text-3xl font-bold">
+          {isEditing ? "Editar publicación" : "Publicar botellas"}
         </h1>
         <p className="text-muted-foreground mt-2">
           {isRecycler
