@@ -46,6 +46,10 @@ interface BottleListing {
   description: string;
   postedDate: string;
   sellerId: number;
+  xp: number;
+  nivel: string;
+  total_ventas: number;
+  botellas_recicladas: number;
 }
 
 export function BottlesList() {
@@ -148,6 +152,67 @@ export function BottlesList() {
 
     setShowBuyModal(false);
     setLoadingCompra(false);
+    // =========================================
+    // XP Y MÉTRICAS COMPRADOR
+    // =========================================
+
+    const { data: compradorData } = await supabase
+      .from("usuarios")
+      .select("*")
+      .eq("id_usuario", comprador.id_usuario)
+      .single();
+
+    if (compradorData) {
+      const nuevoXP = (compradorData.xp || 0) + 50;
+
+      await supabase
+        .from("usuarios")
+        .update({
+          xp: nuevoXP,
+          nivel: calcularNivel(nuevoXP),
+
+          total_compras:
+            (compradorData.total_compras || 0) + 1,
+
+          botellas_recicladas:
+            (compradorData.botellas_recicladas || 0)
+            + cantidad,
+
+          plastico_recuperado:
+            (compradorData.plastico_recuperado || 0)
+            + cantidad * 0.02,
+
+          co2_reducido:
+            (compradorData.co2_reducido || 0)
+            + cantidad * 0.01,
+        })
+        .eq("id_usuario", comprador.id_usuario);
+    }
+
+    // =========================================
+    // XP Y MÉTRICAS VENDEDOR
+    // =========================================
+
+    const { data: vendedor } = await supabase
+      .from("usuarios")
+      .select("*")
+      .eq("id_usuario", selectedListing.id_vendedor)
+      .single();
+
+    if (vendedor) {
+      const xpVendedor = (vendedor.xp || 0) + 100;
+
+      await supabase
+        .from("usuarios")
+        .update({
+          xp: xpVendedor,
+          nivel: calcularNivel(xpVendedor),
+
+          total_ventas:
+            (vendedor.total_ventas || 0) + 1,
+        })
+        .eq("id_usuario", vendedor.id_usuario);
+    }
     // Recargar la lista para reflejar que la publicación sigue igual (no cambió)
     await cargarDatos();
   };
@@ -204,7 +269,17 @@ export function BottlesList() {
         descripcion,
         fecha_publicacion,
         estado,
-        usuarios!id_usuario (id_usuario, nombre, tipo_usuario, telefono, moneda),
+        usuarios!id_usuario (
+  id_usuario,
+  nombre,
+  tipo_usuario,
+  telefono,
+  moneda,
+  xp,
+  nivel,
+  total_ventas,
+  botellas_recicladas
+),
         tipos_botella!id_tipo_botella (nombre),
         ubicaciones!id_ubicacion (ciudad, pais)
       `,
@@ -235,10 +310,25 @@ export function BottlesList() {
         : "Colombia",
       description: p.descripcion || "",
       postedDate: p.fecha_publicacion,
+      xp: p.usuarios?.xp || 0,
+nivel: p.usuarios?.nivel || "🍃 Novato Verde",
+total_ventas: p.usuarios?.total_ventas || 0,
+botellas_recicladas: p.usuarios?.botellas_recicladas || 0,
     }));
 
     setListings(mapped);
     setLoading(false);
+  };
+
+  const calcularNivel = (xp: number) => {
+    if (xp >= 5000) return "👑 Leyenda del Planeta";
+    if (xp >= 3000) return "🏆 Maestro del Reciclaje";
+    if (xp >= 1500) return "🌎 Guardián Ambiental";
+    if (xp >= 800) return "♻️ Eco Héroe";
+    if (xp >= 300) return "🌿 Reciclador Experto";
+    if (xp >= 100) return "🌱 Reciclador Activo";
+
+    return "🍃 Novato Verde";
   };
 
   const handleContactar = (listing: BottleListing) => {
@@ -251,6 +341,7 @@ export function BottlesList() {
       : `https://wa.me/?text=${message}`;
     window.open(url, "_blank");
   };
+
 
   const eliminarPublicacion = async (id: number) => {
     const confirmar = confirm("¿Eliminar esta publicación?");
@@ -369,18 +460,18 @@ export function BottlesList() {
         {(searchQuery ||
           selectedType !== "all" ||
           selectedLocation !== "all") && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setSearchQuery("");
-              setSelectedType("all");
-              setSelectedLocation("all");
-            }}
-          >
-            Limpiar filtros
-          </Button>
-        )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearchQuery("");
+                setSelectedType("all");
+                setSelectedLocation("all");
+              }}
+            >
+              Limpiar filtros
+            </Button>
+          )}
       </div>
 
       {loading ? (
@@ -406,6 +497,19 @@ export function BottlesList() {
                       <CardTitle className="text-lg">
                         {listing.seller}
                       </CardTitle>
+                      <div className="flex flex-wrap gap-2 mt-2">
+  <Badge className="bg-amber-100 text-amber-700 border border-amber-300">
+    {listing.nivel}
+  </Badge>
+
+  <Badge className="bg-blue-100 text-blue-700 border border-blue-300">
+    ⭐ {listing.xp} XP
+  </Badge>
+
+  <Badge className="bg-green-100 text-green-700 border border-green-300">
+    ♻️ {listing.total_ventas} ventas
+  </Badge>
+</div>
                     </div>
                     <CardDescription className="flex items-center gap-1">
                       <MapPin className="size-3" />

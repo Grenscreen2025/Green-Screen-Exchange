@@ -45,6 +45,14 @@ export function UserProfile() {
     joinDate: "",
     tipo: "",
     rol: "",
+
+    xp: 0,
+    nivel: "",
+    totalVentas: 0,
+    totalCompras: 0,
+    plasticoRecuperado: 0,
+    co2Reducido: 0,
+    botellasRecicladas: 0,
   });
 
   const [stats, setStats] = useState({
@@ -120,6 +128,14 @@ export function UserProfile() {
       joinDate: data.fecha_registro || "",
       tipo: data.tipo_usuario || "",
       rol: data.rol || "user",
+
+      xp: data.xp || 0,
+      nivel: data.nivel || "🍃 Novato Verde",
+      totalVentas: data.total_ventas || 0,
+      totalCompras: data.total_compras || 0,
+      plasticoRecuperado: data.plastico_recuperado || 0,
+      co2Reducido: data.co2_reducido || 0,
+      botellasRecicladas: data.botellas_recicladas || 0,
     });
 
     // Obtener estadísticas de transacciones
@@ -292,6 +308,39 @@ export function UserProfile() {
               <div className="text-xs text-muted-foreground">Calificación</div>
             </div>
           </div>
+          <div className="grid gap-4 md:grid-cols-2 mt-6">
+            <div className="p-4 bg-amber-50 rounded-lg">
+              <div className="text-sm text-muted-foreground">Nivel</div>
+              <div className="text-xl font-bold">
+                {profileData.nivel}
+              </div>
+            </div>
+
+            <div className="p-4 bg-blue-50 rounded-lg">
+              <div className="text-sm text-muted-foreground">XP</div>
+              <div className="text-2xl font-bold text-blue-600">
+                {profileData.xp}
+              </div>
+            </div>
+
+            <div className="p-4 bg-green-50 rounded-lg">
+              <div className="text-sm text-muted-foreground">
+                Total Ventas
+              </div>
+              <div className="text-2xl font-bold text-primary">
+                {profileData.totalVentas}
+              </div>
+            </div>
+
+            <div className="p-4 bg-purple-50 rounded-lg">
+              <div className="text-sm text-muted-foreground">
+                Total Compras
+              </div>
+              <div className="text-2xl font-bold text-purple-600">
+                {profileData.totalCompras}
+              </div>
+            </div>
+          </div>
 
           <Separator />
 
@@ -443,9 +492,9 @@ export function UserProfile() {
                   <div className="font-medium">
                     {profileData.joinDate
                       ? new Date(profileData.joinDate).toLocaleDateString(
-                          "es-ES",
-                          { year: "numeric", month: "long", day: "numeric" },
-                        )
+                        "es-ES",
+                        { year: "numeric", month: "long", day: "numeric" },
+                      )
                       : "N/A"}
                   </div>
                 </div>
